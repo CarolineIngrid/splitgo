@@ -54,6 +54,18 @@ body {
   margin: 0;
 }
 
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgb(120 60 196 / 38%);
+  outline-offset: 2px;
+}
+
 #root {
   width: 100%;
   min-height: 100svh;
