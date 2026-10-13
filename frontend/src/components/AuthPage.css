@@ -636,6 +636,11 @@
   transform: translateY(-1px);
 }
 
+.submit-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .submit-button span {
   font-size: 18px;
   font-weight: 400;

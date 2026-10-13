@@ -111,6 +111,7 @@ function FormField({ label, type = 'text', name, autoComplete, placeholder }) {
 function AuthForm() {
   const [mode, setMode] = useState('login')
   const [feedback, setFeedback] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const currentMode = authModes[mode]
   const isSignup = mode === 'signup'
 
@@ -119,9 +120,60 @@ function AuthForm() {
     setFeedback('')
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    setFeedback('A autenticação ainda não está conectada. Seus dados não foram enviados.')
+    setFeedback('')
+
+    if (!isSignup) {
+      setFeedback('O login ainda não está implementado.')
+      return
+    }
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    setIsSubmitting(true)
+
+    let response
+    try {
+      response = await fetch('/api/auth/register/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          email: formData.get('email'),
+          password: formData.get('password'),
+        }),
+      })
+    } catch {
+      setFeedback('Não foi possível conectar ao servidor. Tente novamente.')
+      setIsSubmitting(false)
+      return
+    }
+
+    let result
+    try {
+      result = await response.json()
+    } catch {
+      setFeedback('O servidor retornou uma resposta inválida.')
+      setIsSubmitting(false)
+      return
+    }
+
+    if (!response.ok) {
+      const errorValues = result && typeof result === 'object'
+        ? Object.values(result)
+        : []
+      const errors = errorValues
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .filter((value) => typeof value === 'string')
+      setFeedback(errors.join(' ') || 'Não foi possível criar a conta.')
+      setIsSubmitting(false)
+      return
+    }
+
+    form.reset()
+    setFeedback('Conta criada com sucesso. O login ainda não está implementado.')
+    setIsSubmitting(false)
   }
 
   return (
@@ -195,7 +247,10 @@ function AuthForm() {
             </div>
           )}
 
-          <button className="submit-button" type="submit">{currentMode.button}<span aria-hidden="true">→</span></button>
+          <button className="submit-button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Criando conta...' : currentMode.button}
+            {!isSubmitting && <span aria-hidden="true">→</span>}
+          </button>
           <p className="form-feedback" role="status" aria-live="polite">{feedback}</p>
         </form>
 

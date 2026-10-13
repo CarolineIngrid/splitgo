@@ -17,9 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from api.views import health_check
+from api.views import UserRegistrationView, health_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='api-health'),
+    path(
+        'api/auth/register/',
+        UserRegistrationView.as_view(),
+        name='api-register',
+    ),
 ]

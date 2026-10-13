@@ -9,8 +9,9 @@ Aplicacao para organizar despesas compartilhadas. Este guia descreve a configura
 - **Banco de dados:** PostgreSQL, configurado por variaveis de ambiente.
 - **Driver PostgreSQL:** Psycopg 3.
 - **Usuario do sistema:** modelo customizado `api.User`, com UUID, nome, email unico, senha armazenada com hash e datas de criacao/atualizacao.
-- **API disponivel:** `GET /api/health/`.
+- **API disponivel:** `GET /api/health/`, `GET /api/auth/register/` (somente staff) e `POST /api/auth/register/`.
 
+A tela de cadastro envia nome, email e senha para o backend, que valida os dados e cria o usuario com senha em hash. O login ainda nao esta implementado. O Vite encaminha requisicoes `/api` para `http://127.0.0.1:8000`.
 
 ## Estrutura
 
@@ -48,6 +49,20 @@ python manage.py runserver
 ```
 
 O backend fica disponivel em `http://127.0.0.1:8000`. O endpoint de verificacao e `http://127.0.0.1:8000/api/health/`.
+
+O cadastro da interface usa `POST /api/auth/register/` com JSON no formato:
+
+```json
+{
+  "name": "Nome da pessoa",
+  "email": "pessoa@exemplo.com",
+  "password": "uma-senha-segura"
+}
+```
+
+Em caso de sucesso, a API retorna `201 Created` com UUID, nome, email e data de criacao; a senha nunca e retornada. Dados invalidos, senha que nao atende aos validadores do Django e email ja cadastrado retornam `400 Bad Request` com os erros de validacao.
+
+O metodo `GET` nessa rota lista UUID, nome, email e data de criacao dos usuarios e exige autenticacao como staff. A senha nao e incluida na resposta. O cadastro via `POST` permanece publico.
 
 Para criar uma conta administrativa local para o Django Admin, abra outro terminal, ative o mesmo ambiente virtual, entre em `backend/` e execute:
 
