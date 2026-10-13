@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import heroImg from './assets/hero.png'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
@@ -6,6 +6,39 @@ import './App.css'
 
 function App() {
   const [count, setCount] = useState(0)
+  const [apiStatus, setApiStatus] = useState({
+    state: 'loading',
+    message: 'Conectando ao backend Django...',
+  })
+
+  useEffect(() => {
+    let isActive = true
+
+    fetch('/api/health/')
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`O backend respondeu com HTTP ${response.status}.`)
+        }
+        return response.json()
+      })
+      .then((data) => {
+        if (isActive) {
+          setApiStatus({ state: 'connected', message: data.message })
+        }
+      })
+      .catch((error) => {
+        if (isActive) {
+          setApiStatus({
+            state: 'error',
+            message: `Não foi possível conectar à API: ${error.message}`,
+          })
+        }
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   return (
     <>
@@ -28,6 +61,9 @@ function App() {
         >
           Count is {count}
         </button>
+        <p className={`api-status ${apiStatus.state}`} role="status">
+          API Django: {apiStatus.message}
+        </p>
       </section>
 
       <div className="ticks"></div>
