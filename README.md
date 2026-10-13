@@ -9,9 +9,9 @@ Aplicacao para organizar despesas compartilhadas. Este guia descreve a configura
 - **Banco de dados:** PostgreSQL, configurado por variaveis de ambiente.
 - **Driver PostgreSQL:** Psycopg 3.
 - **Usuario do sistema:** modelo customizado `api.User`, com UUID, nome, email unico, senha armazenada com hash e datas de criacao/atualizacao.
-- **API disponivel:** verificacao, cadastro e autenticacao por sessao em `/api/`.
+- **API disponivel:** verificacao, cadastro, autenticacao por sessao e grupos compartilhados em `/api/`.
 
-A tela de cadastro envia nome, email e senha para o backend, que valida os dados e cria o usuario com senha em hash. O login cria uma sessao Django e redireciona ao painel; logout encerra a sessao. Grupos e despesas ainda nao sao persistidos pela API. O Vite encaminha requisicoes `/api` para `http://127.0.0.1:8000`.
+A tela de cadastro envia nome, email e senha para o backend, que valida os dados e cria o usuario com senha em hash. O login cria uma sessao Django e redireciona ao painel; logout encerra a sessao. Grupos sao persistidos e associados ao usuario que os criou. Despesas ainda nao sao persistidas pela API. O Vite encaminha requisicoes `/api` para `http://127.0.0.1:8000`.
 
 ## Estrutura
 
@@ -85,6 +85,24 @@ Em caso de sucesso, a API retorna `201 Created` com UUID, nome, email e data de 
 O metodo `GET /api/auth/register/` lista UUID, nome, email e data de criacao dos usuarios e exige uma sessao Django autenticada como staff. A senha nao e incluida na resposta. O cadastro via `POST` permanece publico. O login usa `POST /api/auth/login/`; a sessao pode ser consultada em `GET /api/auth/session/` e encerrada com `POST /api/auth/logout/`.
 
 As requisicoes POST buscam o token CSRF em `GET /api/auth/csrf/` antes de enviar dados. No desenvolvimento local, `http://localhost:5173` e `http://127.0.0.1:5173` sao origens confiaveis; para outros ambientes, configure `CSRF_TRUSTED_ORIGINS`.
+
+### Grupos compartilhados
+
+As rotas de grupos usam a sessao autenticada do Django:
+
+- `GET /api/groups/` lista somente os grupos dos quais o usuario atual participa.
+- `POST /api/groups/` cria um grupo e associa o usuario autenticado como administrador. O corpo JSON exige `name` e `currency`, por exemplo:
+
+  ```json
+  {
+    "name": "Viagem de ferias",
+    "currency": "BRL"
+  }
+  ```
+
+- `GET /api/groups/currencies/` lista as moedas aceitas para novos grupos: real brasileiro (`BRL`) e dolar americano (`USD`). A API tambem rejeita qualquer outro codigo.
+
+A resposta de grupo inclui `id` (UUID), `name`, `currency`, `role` (`admin` ou `member`) e `created_at`. A criacao do grupo e da participacao administrativa do criador ocorre em uma unica transacao. Criar um grupo nao cria despesas.
 
 Para criar uma conta administrativa local para o Django Admin, abra outro terminal, ative o mesmo ambiente virtual, entre em `backend/` e execute:
 

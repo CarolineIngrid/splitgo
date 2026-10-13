@@ -18,7 +18,9 @@ from django.contrib import admin
 from django.urls import path
 
 from api.views import (
+    GroupListCreateView,
     UserRegistrationView,
+    available_currencies,
     csrf_token,
     current_user,
     health_check,
@@ -33,6 +35,8 @@ urlpatterns = [
     path('api/auth/login/', login_user, name='api-login'),
     path('api/auth/session/', current_user, name='api-session'),
     path('api/auth/logout/', logout_user, name='api-logout'),
+    path('api/groups/currencies/', available_currencies, name='api-group-currencies'),
+    path('api/groups/', GroupListCreateView.as_view(), name='api-groups'),
     path(
         'api/auth/register/',
         UserRegistrationView.as_view(),

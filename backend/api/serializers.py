@@ -1,8 +1,9 @@
+from django.db import transaction
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from .models import User
+from .models import Group, GroupMembership, SUPPORTED_CURRENCIES, User
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -25,3 +26,44 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    currency = serializers.CharField(max_length=3)
+
+    class Meta:
+        model = Group
+        fields = ('id', 'name', 'currency', 'role', 'created_at')
+        read_only_fields = ('id', 'role', 'created_at')
+
+    def validate_currency(self, value):
+        currency = value.strip().upper()
+        if currency not in SUPPORTED_CURRENCIES:
+            raise serializers.ValidationError(
+                'Selecione real brasileiro (BRL) ou dólar americano (USD).'
+            )
+        return currency
+
+    def get_role(self, group):
+        request = self.context.get('request')
+        if request is None or not request.user.is_authenticated:
+            return None
+        return next(
+            (
+                membership.role
+                for membership in group.memberships.all()
+                if membership.user_id == request.user.pk
+            ),
+            None,
+        )
+
+    @transaction.atomic
+    def create(self, validated_data):
+        group = Group.objects.create(**validated_data)
+        GroupMembership.objects.create(
+            group=group,
+            user=self.context['request'].user,
+            role=GroupMembership.Role.ADMIN,
+        )
+        return group

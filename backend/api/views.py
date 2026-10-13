@@ -12,8 +12,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .auth_serializers import AuthenticatedUserSerializer
-from .models import User
-from .serializers import UserRegistrationSerializer
+from .models import Group, SUPPORTED_CURRENCIES, User
+from .serializers import GroupSerializer, UserRegistrationSerializer
 
 
 @api_view(['GET'])
@@ -43,6 +43,42 @@ class UserRegistrationView(APIView):
             UserRegistrationSerializer(user).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class GroupListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        groups = Group.objects.filter(
+            memberships__user=request.user,
+        ).prefetch_related('memberships').distinct()
+        serializer = GroupSerializer(
+            groups,
+            many=True,
+            context={'request': request},
+        )
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = GroupSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        group = serializer.save()
+        return Response(
+            GroupSerializer(group, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@api_view(['GET'])
+def available_currencies(request):
+    currencies = [
+        {'code': code, 'name': name}
+        for code, name in sorted(SUPPORTED_CURRENCIES.items())
+    ]
+    return Response(currencies)
 
 
 @require_GET

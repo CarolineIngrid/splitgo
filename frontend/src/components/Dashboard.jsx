@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '../lib/api.js'
+import GroupCreationDialog from './GroupCreationDialog.jsx'
 import './Dashboard.css'
 
 const navigation = [
@@ -67,9 +68,10 @@ function Brand() {
   )
 }
 
-function EmptyState({ section, onCreateGroup }) {
+function EmptyState({ section, onCreateGroup, onViewGroups }) {
   const isOverview = section === 'inicio'
   const isGroups = section === 'grupos'
+  const isExpenses = section === 'despesas'
 
   return (
     <section className="dashboard-empty" aria-labelledby="empty-title">
@@ -93,11 +95,18 @@ function EmptyState({ section, onCreateGroup }) {
             ? 'Reúna as pessoas e organize os gastos de cada plano em um só lugar.'
             : 'Quando você adicionar um gasto a um grupo, poderá acompanhar tudo por aqui.'}
       </p>
-      <button className="dashboard-button dashboard-button--primary" type="button" onClick={onCreateGroup}>
-        <Icon name="plus" size={18} />
-        Criar meu primeiro grupo
-      </button>
-      <span className="dashboard-empty__note">Grupos e despesas serão salvos na sua conta.</span>
+      {isExpenses ? (
+        <button className="dashboard-button dashboard-button--outline" type="button" onClick={onViewGroups}>
+          <Icon name="users" size={18} />
+          Ver meus grupos
+        </button>
+      ) : (
+        <button className="dashboard-button dashboard-button--primary" type="button" onClick={onCreateGroup}>
+          <Icon name="plus" size={18} />
+          Criar meu primeiro grupo
+        </button>
+      )}
+      {!isExpenses && <span className="dashboard-empty__note">Grupos e despesas serão salvos na sua conta.</span>}
     </section>
   )
 }
@@ -108,6 +117,10 @@ function Dashboard({ user, onLogout }) {
   const [notice, setNotice] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
+  const [groups, setGroups] = useState([])
+  const [isLoadingGroups, setIsLoadingGroups] = useState(true)
+  const [groupsError, setGroupsError] = useState('')
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false)
   const currentSection = sectionCopy[activeSection]
   const firstName = user.name.trim().split(/\s+/)[0]
   const initials = user.name
@@ -117,6 +130,27 @@ function Dashboard({ user, onLogout }) {
     .map((part) => part[0])
     .join('')
     .toUpperCase()
+
+  useEffect(() => {
+    let isCurrent = true
+
+    apiRequest('/api/groups/')
+      .then((result) => {
+        if (!isCurrent) return
+        setGroups(result)
+        setGroupsError('')
+      })
+      .catch((error) => {
+        if (isCurrent) setGroupsError(error.message)
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingGroups(false)
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -130,8 +164,30 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
-  function handleCreateGroup() {
-    setNotice('A criação de grupos estará disponível em breve.')
+  const handleCreateGroup = useCallback(() => {
+    setNotice('')
+    setActiveSection('grupos')
+    setIsCreatingGroup(true)
+  }, [])
+
+  const closeGroupDialog = useCallback(() => {
+    setIsCreatingGroup(false)
+  }, [])
+
+  function handleRetryGroups() {
+    setIsLoadingGroups(true)
+    setGroupsError('')
+    apiRequest('/api/groups/')
+      .then((result) => setGroups(result))
+      .catch((error) => setGroupsError(error.message))
+      .finally(() => setIsLoadingGroups(false))
+  }
+
+  function handleGroupCreated(group) {
+    setGroups((currentGroups) => [group, ...currentGroups])
+    setIsCreatingGroup(false)
+    setActiveSection('grupos')
+    setNotice(`Grupo “${group.name}” criado com sucesso.`)
   }
 
   return (
@@ -187,7 +243,7 @@ function Dashboard({ user, onLogout }) {
             >
               <Icon name={item.icon} size={19} />
               <span>{item.label}</span>
-              {item.id === 'grupos' && <span className="dashboard-nav__count">0</span>}
+              {item.id === 'grupos' && <span className="dashboard-nav__count">{groups.length}</span>}
             </button>
           ))}
         </nav>
@@ -259,8 +315,8 @@ function Dashboard({ user, onLogout }) {
             <article className="balance-tile balance-tile--peach">
               <span className="balance-tile__icon"><Icon name="receipt" size={18} /></span>
               <span className="balance-tile__label">Grupos ativos</span>
-              <strong>0</strong>
-              <span className="balance-tile__caption">Crie um grupo para começar</span>
+              <strong>{isLoadingGroups ? '—' : groups.length}</strong>
+              <span className="balance-tile__caption">{groups.length === 1 ? 'grupo criado' : 'grupos criados'}</span>
             </article>
           </section>
 
@@ -274,7 +330,35 @@ function Dashboard({ user, onLogout }) {
                 Ver grupos <span aria-hidden="true">→</span>
               </button>
             </div>
-            <EmptyState section={activeSection} onCreateGroup={handleCreateGroup} />
+            {activeSection === 'despesas' ? (
+              <EmptyState
+                section={activeSection}
+                onCreateGroup={handleCreateGroup}
+                onViewGroups={() => setActiveSection('grupos')}
+              />
+            ) : isLoadingGroups ? (
+              <p className="dashboard-list-message" role="status">Carregando seus grupos...</p>
+            ) : groupsError ? (
+              <div className="dashboard-list-message dashboard-list-message--error" role="alert">
+                <span>{groupsError}</span>
+                <button className="text-button" type="button" onClick={handleRetryGroups}>Tentar novamente</button>
+              </div>
+            ) : groups.length === 0 ? (
+              <EmptyState section={activeSection} onCreateGroup={handleCreateGroup} />
+            ) : (
+              <div className="group-list">
+                {groups.map((group) => (
+                  <article className="group-card" key={group.id}>
+                    <span className="group-card__icon"><Icon name="users" size={20} /></span>
+                    <span className="group-card__details">
+                      <strong>{group.name}</strong>
+                      <small>{group.role === 'admin' ? 'Administrador' : 'Integrante'} · Criado em {new Intl.DateTimeFormat('pt-BR').format(new Date(group.created_at))}</small>
+                    </span>
+                    <span className="group-card__currency">{group.currency}</span>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
 
           {notice && <p className="dashboard-notice" role="status">{notice}</p>}
@@ -305,6 +389,12 @@ function Dashboard({ user, onLogout }) {
         <span>Sair</span>
         </button>
       </nav>
+      {isCreatingGroup && (
+        <GroupCreationDialog
+          onClose={closeGroupDialog}
+          onCreated={handleGroupCreated}
+        />
+      )}
     </main>
   )
 }
