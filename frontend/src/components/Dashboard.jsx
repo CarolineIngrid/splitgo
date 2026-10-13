@@ -103,6 +103,7 @@ function EmptyState({ section, onCreateGroup }) {
 }
 
 function Dashboard({ user, onLogout }) {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [activeSection, setActiveSection] = useState('inicio')
   const [notice, setNotice] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -134,9 +135,35 @@ function Dashboard({ user, onLogout }) {
   }
 
   return (
-    <main className="dashboard">
+    <main className={`dashboard ${isSidebarCollapsed ? 'dashboard--sidebar-collapsed' : ''}`}>
       <aside className="dashboard-sidebar" aria-label="Menu principal">
-        <Brand />
+        <div className="dashboard-sidebar__header">
+          <Brand />
+          <button
+            className="sidebar-toggle"
+            type="button"
+            aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-expanded={!isSidebarCollapsed}
+            title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            <svg
+              aria-hidden="true"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {isSidebarCollapsed
+                ? <path d="m9 18 6-6-6-6" />
+                : <path d="m15 18-6-6 6-6" />}
+            </svg>
+          </button>
+        </div>
         <div className="dashboard-workspace">
           <span className="workspace-avatar">S</span>
           <span><strong>Meu espaço</strong><small>Área pessoal</small></span>
@@ -151,6 +178,8 @@ function Dashboard({ user, onLogout }) {
               key={item.id}
               type="button"
               aria-current={activeSection === item.id ? 'page' : undefined}
+              title={isSidebarCollapsed ? item.label : undefined}
+              aria-label={isSidebarCollapsed ? item.label : undefined}
               onClick={() => {
                 setActiveSection(item.id)
                 setNotice('')
