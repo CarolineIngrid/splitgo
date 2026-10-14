@@ -9,9 +9,9 @@ Aplicacao para organizar despesas compartilhadas. Este guia descreve a configura
 - **Banco de dados:** PostgreSQL, configurado por variaveis de ambiente.
 - **Driver PostgreSQL:** Psycopg 3.
 - **Usuario do sistema:** modelo customizado `api.User`, com UUID, nome, email unico, senha armazenada com hash e datas de criacao/atualizacao.
-- **API disponivel:** verificacao, cadastro, autenticacao por sessao e grupos compartilhados em `/api/`.
+- **API disponivel:** verificacao, cadastro, autenticacao por sessao, grupos compartilhados e despesas com rateio em `/api/`.
 
-A tela de cadastro envia nome, email e senha para o backend, que valida os dados e cria o usuario com senha em hash. O login cria uma sessao Django e redireciona ao painel; logout encerra a sessao. Grupos sao persistidos e associados ao usuario que os criou. Despesas ainda nao sao persistidas pela API. O Vite encaminha requisicoes `/api` para `http://127.0.0.1:8000`.
+A tela de cadastro envia nome, email e senha para o backend, que valida os dados e cria o usuario com senha em hash. O login cria uma sessao Django e redireciona ao painel; logout encerra a sessao. Grupos e despesas sao persistidos, e os participantes e parcelas sao validados no servidor. O Vite encaminha requisicoes `/api` para `http://127.0.0.1:8000`.
 
 ## Estrutura
 
@@ -103,6 +103,30 @@ As rotas de grupos usam a sessao autenticada do Django:
 - `GET /api/groups/currencies/` lista as moedas aceitas para novos grupos: real brasileiro (`BRL`) e dolar americano (`USD`). A API tambem rejeita qualquer outro codigo.
 
 A resposta de grupo inclui `id` (UUID), `name`, `currency`, `role` (`admin` ou `member`) e `created_at`. A criacao do grupo e da participacao administrativa do criador ocorre em uma unica transacao. Criar um grupo nao cria despesas.
+
+#### Despesas compartilhadas
+
+As despesas exigem uma sessao autenticada e que o usuario atual participe do grupo:
+
+- `GET /api/groups/<group_id>/expenses/` lista as despesas e as parcelas do grupo.
+- `POST /api/groups/<group_id>/expenses/` registra uma despesa e todas as parcelas em uma unica transacao.
+
+O corpo exige `description`, `amount`, `paid_by` (UUID de integrante do grupo), `split_type` (`equal`, `amount` ou `percentage`) e `participants`, uma lista de objetos com `user_id`. Para rateios `amount` e `percentage`, cada participante tambem informa `value`. Exemplo de rateio por valores:
+
+```json
+{
+  "description": "Jantar",
+  "amount": "120.00",
+  "paid_by": "UUID_DO_PAGADOR",
+  "split_type": "amount",
+  "participants": [
+    {"user_id": "UUID_DA_PESSOA_1", "value": "70.00"},
+    {"user_id": "UUID_DA_PESSOA_2", "value": "50.00"}
+  ]
+}
+```
+
+Os participantes do rateio e quem pagou devem ser integrantes do grupo. Valores informados precisam ser positivos; as parcelas por valor devem somar o total da despesa e os percentuais devem somar 100%. Em rateio igualitario, eventuais centavos restantes sao distribuidos entre os primeiros participantes da lista. O retorno inclui o pagador, os valores calculados e, quando informado, o percentual de cada participante.
 
 Para criar uma conta administrativa local para o Django Admin, abra outro terminal, ative o mesmo ambiente virtual, entre em `backend/` e execute:
 

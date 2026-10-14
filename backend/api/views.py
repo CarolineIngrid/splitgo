@@ -12,8 +12,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .auth_serializers import AuthenticatedUserSerializer
-from .models import Group, SUPPORTED_CURRENCIES, User
-from .serializers import GroupSerializer, UserRegistrationSerializer
+from .models import Expense, Group, SUPPORTED_CURRENCIES, User
+from .serializers import (
+    ExpenseCreateSerializer,
+    ExpenseDetailSerializer,
+    GroupSerializer,
+    UserRegistrationSerializer,
+)
 
 
 @api_view(['GET'])
@@ -68,6 +73,47 @@ class GroupListCreateView(APIView):
         group = serializer.save()
         return Response(
             GroupSerializer(group, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupExpenseListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        # Filtrar pela participação impede consultar ou alterar grupos alheios.
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        expenses = group.expenses.select_related('paid_by').prefetch_related(
+            'shares__user',
+        )
+        return Response(ExpenseDetailSerializer(expenses, many=True).data)
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = ExpenseCreateSerializer(
+            data=request.data,
+            context={'group': group},
+        )
+        serializer.is_valid(raise_exception=True)
+        expense = serializer.save()
+        return Response(
+            ExpenseDetailSerializer(expense).data,
             status=status.HTTP_201_CREATED,
         )
 

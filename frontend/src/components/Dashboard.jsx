@@ -291,6 +291,7 @@ function Dashboard({ user, onLogout }) {
           {notice && <p className="dashboard-notice" role="status">{notice}</p>}
           {selectedGroup ? (
             <GroupDetails
+              key={selectedGroup.id}
               group={selectedGroup}
               onBack={() => setSelectedGroup(null)}
             />
