@@ -211,3 +211,84 @@ class GroupExpenseTests(APITestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 404)
+
+
+class GroupMemberManagementTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.member = user_model.objects.create_user(
+            email='group-member@example.com',
+            name='Integrante',
+            password='SenhaSegura123!',
+        )
+        self.available_user = user_model.objects.create_user(
+            email='available@example.com',
+            name='Pessoa Disponível',
+            password='SenhaSegura123!',
+        )
+        self.outsider = user_model.objects.create_user(
+            email='outsider-member@example.com',
+            name='Pessoa de Fora',
+            password='SenhaSegura123!',
+        )
+        self.group = Group.objects.create(name='Casa', currency='BRL')
+        GroupMembership.objects.create(
+            group=self.group,
+            user=self.member,
+            role=GroupMembership.Role.ADMIN,
+        )
+        self.client.force_authenticate(self.member)
+        self.url = reverse('api-group-members', args=[self.group.pk])
+
+    def test_available_members_lists_registered_users_not_in_group(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [user['id'] for user in response.data],
+            [str(self.available_user.pk), str(self.outsider.pk)],
+        )
+        self.assertNotIn(str(self.member.pk), [user['id'] for user in response.data])
+
+    def test_group_member_can_add_a_registered_user(self):
+        response = self.client.post(
+            self.url,
+            {'user_id': str(self.available_user.pk)},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['user_id'], str(self.available_user.pk))
+        self.assertEqual(
+            GroupMembership.objects.filter(
+                group=self.group,
+                user=self.available_user,
+            ).count(),
+            1,
+        )
+
+    def test_adding_existing_member_does_not_create_duplicate(self):
+        payload = {'user_id': str(self.member.pk)}
+
+        first_response = self.client.post(self.url, payload, format='json')
+        second_response = self.client.post(self.url, payload, format='json')
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            GroupMembership.objects.filter(group=self.group, user=self.member).count(),
+            1,
+        )
+
+    def test_non_member_cannot_list_or_add_group_members(self):
+        self.client.force_authenticate(self.outsider)
+
+        list_response = self.client.get(self.url)
+        add_response = self.client.post(
+            self.url,
+            {'user_id': str(self.available_user.pk)},
+            format='json',
+        )
+
+        self.assertEqual(list_response.status_code, 404)
+        self.assertEqual(add_response.status_code, 404)

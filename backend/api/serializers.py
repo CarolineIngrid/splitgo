@@ -55,6 +55,19 @@ class GroupMemberSerializer(serializers.ModelSerializer):
         )
 
 
+class AvailableGroupMemberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'name', 'email')
+
+
+class AddGroupMemberSerializer(serializers.Serializer):
+    user_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        source='user',
+    )
+
+
 class GroupSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     currency = serializers.CharField(max_length=3)

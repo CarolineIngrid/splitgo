@@ -104,6 +104,15 @@ As rotas de grupos usam a sessao autenticada do Django:
 
 A resposta de grupo inclui `id` (UUID), `name`, `currency`, `role` (`admin` ou `member`) e `created_at`. A criacao do grupo e da participacao administrativa do criador ocorre em uma unica transacao. Criar um grupo nao cria despesas.
 
+#### Participantes do grupo
+
+Qualquer integrante autenticado do grupo pode consultar contas cadastradas que ainda nao fazem parte dele e adicionar uma delas:
+
+- `GET /api/groups/<group_id>/members/` lista as pessoas disponiveis, com UUID, nome e email.
+- `POST /api/groups/<group_id>/members/` adiciona a pessoa indicada por `user_id` como integrante. Se ela ja pertencer ao grupo, a API retorna a participacao existente sem duplicar o vinculo.
+
+O painel apresenta a lista de contas disponiveis em “Adicionar pessoas”. A lista exclui quem ja participa do grupo; depois da inclusao, a tela atualiza os participantes e essa pessoa passa a poder ser selecionada nos proximos rateios.
+
 #### Despesas compartilhadas
 
 As despesas exigem uma sessao autenticada e que o usuario atual participe do grupo:

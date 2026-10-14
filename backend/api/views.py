@@ -12,10 +12,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .auth_serializers import AuthenticatedUserSerializer
-from .models import Expense, Group, SUPPORTED_CURRENCIES, User
+from .models import Expense, Group, GroupMembership, SUPPORTED_CURRENCIES, User
 from .serializers import (
+    AddGroupMemberSerializer,
+    AvailableGroupMemberSerializer,
     ExpenseCreateSerializer,
     ExpenseDetailSerializer,
+    GroupMemberSerializer,
     GroupSerializer,
     UserRegistrationSerializer,
 )
@@ -115,6 +118,55 @@ class GroupExpenseListCreateView(APIView):
         return Response(
             ExpenseDetailSerializer(expense).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupMemberListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        # Somente integrantes atuais podem consultar ou alterar a composição do grupo.
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        available_users = User.objects.exclude(
+            group_memberships__group=group,
+        ).order_by('name', 'email')
+        return Response(
+            AvailableGroupMemberSerializer(available_users, many=True).data,
+        )
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = AddGroupMemberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership, created = GroupMembership.objects.get_or_create(
+            group=group,
+            user=serializer.validated_data['user'],
+            defaults={'role': GroupMembership.Role.MEMBER},
+        )
+        return Response(
+            GroupMemberSerializer(
+                membership,
+                context={'request': request},
+            ).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 

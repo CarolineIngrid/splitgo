@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import ExpenseCreationDialog from './ExpenseCreationDialog.jsx'
+import GroupMemberDialog from './GroupMemberDialog.jsx'
 
 function formatCurrency(amount, currency) {
   return new Intl.NumberFormat('pt-BR', {
@@ -19,12 +20,31 @@ function getInitials(name) {
     .toUpperCase()
 }
 
-function GroupDetails({ group, onBack }) {
+function getExpenseIcon(description) {
+  const normalizedDescription = description.toLocaleLowerCase('pt-BR')
+  const categories = [
+    { terms: ['hotel', 'hosped', 'pousada', 'aluguel'], icon: '🛏️' },
+    { terms: ['jantar', 'almoço', 'almoco', 'restaurante', 'café', 'cafe', 'comida'], icon: '🍽️' },
+    { terms: ['taxi', 'táxi', 'uber', 'transporte', 'combustível', 'combustivel'], icon: '🚕' },
+    { terms: ['mercado', 'supermercado', 'compra'], icon: '🛍️' },
+    { terms: ['viagem', 'passagem', 'voo', 'avião', 'aviao'], icon: '✈️' },
+    { terms: ['ingresso', 'museu', 'passeio', 'show'], icon: '🎟️' },
+  ]
+  const category = categories.find(({ terms }) => (
+    terms.some((term) => normalizedDescription.includes(term))
+  ))
+
+  return category?.icon ?? '🧾'
+}
+
+function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [expenses, setExpenses] = useState([])
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true)
   const [expensesError, setExpensesError] = useState('')
   const [isCreatingExpense, setIsCreatingExpense] = useState(false)
+  const [isAddingMembers, setIsAddingMembers] = useState(false)
   const [expenseNotice, setExpenseNotice] = useState('')
+  const [memberNotice, setMemberNotice] = useState('')
   const members = group.members ?? []
   const totalExpenses = expenses.reduce((total, expense) => total + Number(expense.amount), 0)
   // O saldo líquido é o que a pessoa pagou menos a soma de suas parcelas.
@@ -79,6 +99,12 @@ function GroupDetails({ group, onBack }) {
     setExpenseNotice('Despesa registrada com sucesso.')
   }
 
+  function handleMemberAdded(membership) {
+    const updatedMembers = [...members, membership]
+    onMembersUpdated(updatedMembers)
+    setMemberNotice(`${membership.name} foi adicionado ao grupo.`)
+  }
+
   function handleRetryExpenses() {
     setIsLoadingExpenses(true)
     setExpensesError('')
@@ -100,7 +126,7 @@ function GroupDetails({ group, onBack }) {
             <img src="/cat.png" alt="" />
           </span>
           <div>
-            <p className="">DETALHES DO GRUPO</p>
+            <p className="group-details__eyebrow">GRUPO COMPARTILHADO</p>
             <h1>{group.name}</h1>
             <p>Criado em {formattedCreatedAt}</p>
           </div>
@@ -158,10 +184,15 @@ function GroupDetails({ group, onBack }) {
             </div>
           ) : (
             <ul className="group-details__expenses">
-              {expenses.map((expense) => (
+              {expenses.map((expense, index) => (
                 <li className="group-details__expense" key={expense.id}>
                   <div className="group-details__expense-heading">
-                    <span className="group-details__empty-icon" aria-hidden="true">$</span>
+                    <span
+                      className={`group-details__expense-icon group-details__expense-icon--${index % 4}`}
+                      aria-hidden="true"
+                    >
+                      {getExpenseIcon(expense.description)}
+                    </span>
                     <div>
                       <strong>{expense.description}</strong>
                       <small>Pago por {expense.paid_by_name}</small>
@@ -187,12 +218,25 @@ function GroupDetails({ group, onBack }) {
         </section>
 
         <section className="group-details__panel" aria-labelledby="group-members-title">
-          <div className="group-details__section-heading">
+          <div className="group-details__section-heading group-details__members-heading">
             <div>
               <h2 id="group-members-title">Participantes</h2>
               <p>Pessoas que fazem parte deste grupo.</p>
             </div>
-            <span className="group-details__section-count">{members.length}</span>
+            <div className="group-details__member-actions">
+              <span className="group-details__section-count">{members.length}</span>
+              <button
+                className="group-details__add-member"
+                type="button"
+                onClick={() => {
+                  setMemberNotice('')
+                  setIsAddingMembers(true)
+                }}
+              >
+                <span aria-hidden="true">+</span>
+                Adicionar pessoas
+              </button>
+            </div>
           </div>
           <ul className="group-details__members">
             {members.map((member, index) => (
@@ -213,6 +257,7 @@ function GroupDetails({ group, onBack }) {
               </li>
             ))}
           </ul>
+          {memberNotice && <p className="group-details__expense-notice" role="status">{memberNotice}</p>}
           <section className="group-details__balance-summary" aria-labelledby="group-balances-title">
             <h3 id="group-balances-title">Saldos calculados</h3>
             {isLoadingExpenses ? (
@@ -243,6 +288,13 @@ function GroupDetails({ group, onBack }) {
           group={group}
           onClose={() => setIsCreatingExpense(false)}
           onCreated={handleExpenseCreated}
+        />
+      )}
+      {isAddingMembers && (
+        <GroupMemberDialog
+          group={group}
+          onClose={() => setIsAddingMembers(false)}
+          onAdded={handleMemberAdded}
         />
       )}
     </div>

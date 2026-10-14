@@ -191,6 +191,15 @@ function Dashboard({ user, onLogout }) {
     setNotice(`Grupo “${group.name}” criado com sucesso.`)
   }
 
+  function handleGroupMembersUpdated(members) {
+    setSelectedGroup((currentGroup) => currentGroup
+      ? { ...currentGroup, members }
+      : currentGroup)
+    setGroups((currentGroups) => currentGroups.map((group) => (
+      group.id === selectedGroup?.id ? { ...group, members } : group
+    )))
+  }
+
   return (
     <main className={`dashboard ${isSidebarCollapsed ? 'dashboard--sidebar-collapsed' : ''}`}>
       <aside className="dashboard-sidebar" aria-label="Menu principal">
@@ -294,6 +303,7 @@ function Dashboard({ user, onLogout }) {
               key={selectedGroup.id}
               group={selectedGroup}
               onBack={() => setSelectedGroup(null)}
+              onMembersUpdated={handleGroupMembersUpdated}
             />
           ) : (
             <>

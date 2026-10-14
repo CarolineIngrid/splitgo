@@ -20,6 +20,7 @@ from django.urls import path
 from api.views import (
     GroupListCreateView,
     GroupExpenseListCreateView,
+    GroupMemberListCreateView,
     UserRegistrationView,
     available_currencies,
     csrf_token,
@@ -42,6 +43,11 @@ urlpatterns = [
         'api/groups/<uuid:group_id>/expenses/',
         GroupExpenseListCreateView.as_view(),
         name='api-group-expenses',
+    ),
+    path(
+        'api/groups/<uuid:group_id>/members/',
+        GroupMemberListCreateView.as_view(),
+        name='api-group-members',
     ),
     path(
         'api/auth/register/',
