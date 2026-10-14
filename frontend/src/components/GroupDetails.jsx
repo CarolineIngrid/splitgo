@@ -47,8 +47,9 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [memberNotice, setMemberNotice] = useState('')
   const members = group.members ?? []
   const totalExpenses = expenses.reduce((total, expense) => total + Number(expense.amount), 0)
-  // O saldo líquido é o que a pessoa pagou menos a soma de suas parcelas.
+  const memberNames = new Map(members.map((member) => [String(member.user_id), member.name]))
   const memberBalances = new Map(members.map((member) => [String(member.user_id), 0]))
+  const pairBalances = new Map()
   expenses.forEach((expense) => {
     const payerId = String(expense.paid_by_id)
     if (memberBalances.has(payerId)) {
@@ -58,15 +59,37 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
       )
     }
     expense.participants.forEach((participant) => {
-      const participantId = String(participant.user_id)
-      if (memberBalances.has(participantId)) {
-        memberBalances.set(
-          participantId,
-          memberBalances.get(participantId) - Math.round(Number(participant.amount) * 100),
-        )
+      const debtorId = String(participant.user_id)
+      const cents = Math.round(Number(participant.amount) * 100)
+      if (memberBalances.has(debtorId)) {
+        memberBalances.set(debtorId, memberBalances.get(debtorId) - cents)
       }
+      if (debtorId === payerId) return
+
+      const [firstId, secondId] = [debtorId, payerId].sort()
+      const pairKey = `${firstId}:${secondId}`
+      const debtDirection = debtorId === firstId ? 1 : -1
+      pairBalances.set(
+        pairKey,
+        (pairBalances.get(pairKey) ?? 0) + cents * debtDirection,
+      )
     })
   })
+  const pairwiseDebts = [...pairBalances.entries()]
+    .flatMap(([pairKey, balance]) => {
+      if (balance === 0) return []
+      const [firstId, secondId] = pairKey.split(':')
+      const debtorId = balance > 0 ? firstId : secondId
+      const creditorId = balance > 0 ? secondId : firstId
+
+      return [{
+        id: pairKey,
+        debtor: memberNames.get(debtorId) ?? 'Participante',
+        creditor: memberNames.get(creditorId) ?? 'Participante',
+        amount: Math.abs(balance) / 100,
+      }]
+    })
+    .sort((first, second) => second.amount - first.amount)
   const formattedCreatedAt = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'long',
   }).format(new Date(group.created_at))
@@ -131,20 +154,53 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             <p>Criado em {formattedCreatedAt}</p>
           </div>
         </div>
-        <span className="group-details__currency">{group.currency}</span>
       </header>
 
       <section className="group-details__summary" aria-label="Resumo do grupo">
+        <article className="group-details__simplify-card">
+          <div className="group-details__simplify-copy">
+            <span className="group-details__metric-label">Acertos entre participantes</span>
+            {isLoadingExpenses ? (
+              <p role="status">Calculando acertos...</p>
+            ) : expensesError ? (
+              <p role="alert">Não foi possível carregar os acertos.</p>
+            ) : pairwiseDebts.length ? (
+              <ul className="group-details__debt-list">
+                {pairwiseDebts.map((debt) => (
+                  <li key={debt.id}>
+                    <span>{debt.debtor} deve</span>
+                    <strong>{formatCurrency(debt.amount, group.currency)}</strong>
+                    <span>a {debt.creditor}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Não há valores pendentes entre os participantes.</p>
+            )}
+          </div>
+          <button
+            className="group-details__simplify-button"
+            type="button"
+            disabled
+            title="Disponível em breve"
+          >
+            Simplificar despesas
+          </button>
+        </article>
         <article className="group-details__metric group-details__metric--purple">
           <span className="group-details__metric-label">Total de despesas</span>
           <strong>{formatCurrency(totalExpenses, group.currency)}</strong>
-          <small>{expenses.length ? 'total registrado no grupo' : 'Nenhuma despesa registrada'}</small>
+          <small>
+            {expenses.length
+              ? `${expenses.length} ${expenses.length === 1 ? 'despesa registrada' : 'despesas registradas'}`
+              : 'Nenhuma despesa registrada'}
+          </small>
         </article>
-        <article className="group-details__metric group-details__metric--peach">
+        {/* <article className="group-details__metric group-details__metric--peach">
           <span className="group-details__metric-label">Despesas</span>
           <strong>{expenses.length}</strong>
           <small>lançamentos no grupo</small>
-        </article>
+        </article> */}
       </section>
 
       <div className="group-details__columns">
