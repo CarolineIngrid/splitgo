@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { apiRequest } from '../lib/api.js'
 import './AuthPage.css'
 
 const authModes = {
@@ -21,12 +22,7 @@ const authModes = {
 function BrandMark({ compact = false }) {
   return (
     <a className={`brand ${compact ? 'brand--compact' : ''}`} href="#inicio" aria-label="Split and Go, início">
-      <span className="brand__symbol" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-      </span>
+      <img className="brand__logo" src="/cat.png" alt="" />
       <span>split <strong>&amp; go</strong></span>
     </a>
   )
@@ -108,7 +104,7 @@ function FormField({ label, type = 'text', name, autoComplete, placeholder }) {
   )
 }
 
-function AuthForm() {
+function AuthForm({ onAuthenticated }) {
   const [mode, setMode] = useState('login')
   const [feedback, setFeedback] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -124,56 +120,38 @@ function AuthForm() {
     event.preventDefault()
     setFeedback('')
 
-    if (!isSignup) {
-      setFeedback('O login ainda não está implementado.')
-      return
-    }
-
     const form = event.currentTarget
     const formData = new FormData(form)
+    const credentials = {
+      email: formData.get('email'),
+      password: formData.get('password'),
+    }
     setIsSubmitting(true)
 
-    let response
     try {
-      response = await fetch('/api/auth/register/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.get('name'),
-          email: formData.get('email'),
-          password: formData.get('password'),
-        }),
-      })
-    } catch {
-      setFeedback('Não foi possível conectar ao servidor. Tente novamente.')
+      if (isSignup) {
+        await apiRequest('/api/auth/register/', {
+          method: 'POST',
+          body: {
+            name: formData.get('name'),
+            ...credentials,
+          },
+        })
+        form.reset()
+        setMode('login')
+        setFeedback('Conta criada com sucesso. Entre com seu e-mail e senha.')
+      } else {
+        const result = await apiRequest('/api/auth/login/', {
+          method: 'POST',
+          body: credentials,
+        })
+        onAuthenticated(result.user)
+      }
+    } catch (error) {
+      setFeedback(error.message || 'Não foi possível conectar ao servidor. Tente novamente.')
+    } finally {
       setIsSubmitting(false)
-      return
     }
-
-    let result
-    try {
-      result = await response.json()
-    } catch {
-      setFeedback('O servidor retornou uma resposta inválida.')
-      setIsSubmitting(false)
-      return
-    }
-
-    if (!response.ok) {
-      const errorValues = result && typeof result === 'object'
-        ? Object.values(result)
-        : []
-      const errors = errorValues
-        .flatMap((value) => Array.isArray(value) ? value : [value])
-        .filter((value) => typeof value === 'string')
-      setFeedback(errors.join(' ') || 'Não foi possível criar a conta.')
-      setIsSubmitting(false)
-      return
-    }
-
-    form.reset()
-    setFeedback('Conta criada com sucesso. O login ainda não está implementado.')
-    setIsSubmitting(false)
   }
 
   return (
@@ -248,7 +226,7 @@ function AuthForm() {
           )}
 
           <button className="submit-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Criando conta...' : currentMode.button}
+            {isSubmitting ? isSignup ? 'Criando conta...' : 'Entrando...' : currentMode.button}
             {!isSubmitting && <span aria-hidden="true">→</span>}
           </button>
           <p className="form-feedback" role="status" aria-live="polite">{feedback}</p>
@@ -266,11 +244,11 @@ function AuthForm() {
   )
 }
 
-function AuthPage() {
+function AuthPage({ onAuthenticated }) {
   return (
     <div className="auth-page">
       <BrandPanel />
-      <AuthForm />
+      <AuthForm onAuthenticated={onAuthenticated} />
     </div>
   )
 }

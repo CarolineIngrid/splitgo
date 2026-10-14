@@ -2,7 +2,20 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 
-from .models import User
+from .models import Group, GroupMembership, User
+
+
+class GroupMembershipInline(admin.TabularInline):
+    model = GroupMembership
+    extra = 0
+
+
+@admin.register(Group)
+class GroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'currency', 'created_at')
+    search_fields = ('name',)
+    list_filter = ('currency',)
+    inlines = (GroupMembershipInline,)
 
 
 class AdminUserCreationForm(UserCreationForm):
