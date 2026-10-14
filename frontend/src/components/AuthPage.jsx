@@ -22,12 +22,7 @@ const authModes = {
 function BrandMark({ compact = false }) {
   return (
     <a className={`brand ${compact ? 'brand--compact' : ''}`} href="#inicio" aria-label="Split and Go, início">
-      <span className="brand__symbol" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-      </span>
+      <img className="brand__logo" src="/cat.png" alt="" />
       <span>split <strong>&amp; go</strong></span>
     </a>
   )

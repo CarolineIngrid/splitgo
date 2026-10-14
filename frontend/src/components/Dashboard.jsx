@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import GroupCreationDialog from './GroupCreationDialog.jsx'
+import GroupDetails from './GroupDetails.jsx'
 import './Dashboard.css'
 
 const navigation = [
@@ -60,9 +61,7 @@ function Icon({ name, size = 20 }) {
 function Brand() {
   return (
     <div className="dashboard-brand" aria-label="Split and Go">
-      <span className="dashboard-brand__mark" aria-hidden="true">
-        <i /><i /><i /><i />
-      </span>
+      <img className="dashboard-brand__logo" src="/cat.png" alt="" />
       <span>split <strong>&amp; go</strong></span>
     </div>
   )
@@ -121,6 +120,7 @@ function Dashboard({ user, onLogout }) {
   const [isLoadingGroups, setIsLoadingGroups] = useState(true)
   const [groupsError, setGroupsError] = useState('')
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
+  const [selectedGroup, setSelectedGroup] = useState(null)
   const currentSection = sectionCopy[activeSection]
   const firstName = user.name.trim().split(/\s+/)[0]
   const initials = user.name
@@ -187,6 +187,7 @@ function Dashboard({ user, onLogout }) {
     setGroups((currentGroups) => [group, ...currentGroups])
     setIsCreatingGroup(false)
     setActiveSection('grupos')
+    setSelectedGroup(group)
     setNotice(`Grupo “${group.name}” criado com sucesso.`)
   }
 
@@ -223,7 +224,6 @@ function Dashboard({ user, onLogout }) {
         <div className="dashboard-workspace">
           <span className="workspace-avatar">S</span>
           <span><strong>Meu espaço</strong><small>Área pessoal</small></span>
-          <span className="workspace-chevron" aria-hidden="true">⌄</span>
         </div>
 
         <p className="dashboard-nav-label">MENU</p>
@@ -238,6 +238,7 @@ function Dashboard({ user, onLogout }) {
               aria-label={isSidebarCollapsed ? item.label : undefined}
               onClick={() => {
                 setActiveSection(item.id)
+                setSelectedGroup(null)
                 setNotice('')
               }}
             >
@@ -269,7 +270,7 @@ function Dashboard({ user, onLogout }) {
 
       <section className="dashboard-main">
         <header className="dashboard-topbar">
-          <div className="dashboard-breadcrumb"><span>Meu espaço</span><span>/</span><strong>{currentSection.title}</strong></div>
+          <div className="dashboard-breadcrumb"><span>Meu espaço</span><span>/</span><strong>{selectedGroup?.name ?? currentSection.title}</strong></div>
           <div className="dashboard-topbar__actions">
             <span className="dashboard-date">
               {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date())}
@@ -287,11 +288,24 @@ function Dashboard({ user, onLogout }) {
         </header>
 
         <div className="dashboard-content">
+          {notice && <p className="dashboard-notice" role="status">{notice}</p>}
+          {selectedGroup ? (
+            <GroupDetails
+              group={selectedGroup}
+              onBack={() => setSelectedGroup(null)}
+            />
+          ) : (
+            <>
           <div className="dashboard-welcome">
             <div>
               <p className="dashboard-eyebrow">{currentSection.eyebrow}</p>
               <h1>{activeSection === 'inicio' ? `Olá, ${firstName}!` : currentSection.title}</h1>
-              <p>{activeSection === 'inicio' ? 'Pronto para deixar as contas mais leves?' : currentSection.description}</p>
+              <p className="dashboard-welcome__description">
+                {activeSection === 'inicio' ? 'Pronto para deixar as contas mais leves?' : currentSection.description}
+              </p>
+              {activeSection === 'inicio' && (
+                <span className="dashboard-holo-divider" aria-hidden="true" />
+              )}
             </div>
             <button className="dashboard-button dashboard-button--outline" type="button" onClick={handleCreateGroup}>
               <Icon name="plus" size={18} />
@@ -348,26 +362,39 @@ function Dashboard({ user, onLogout }) {
             ) : (
               <div className="group-list">
                 {groups.map((group) => (
-                  <article className="group-card" key={group.id}>
-                    <span className="group-card__icon"><Icon name="users" size={20} /></span>
+                  <button
+                    className="group-card"
+                    key={group.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedGroup(group)
+                      setActiveSection('grupos')
+                      setNotice('')
+                    }}
+                    aria-label={`Abrir grupo ${group.name}`}
+                  >
+                    <span className="group-card__icon">
+                      <img src="/cat.png" alt="" />
+                    </span>
                     <span className="group-card__details">
                       <strong>{group.name}</strong>
                       <small>{group.role === 'admin' ? 'Administrador' : 'Integrante'} · Criado em {new Intl.DateTimeFormat('pt-BR').format(new Date(group.created_at))}</small>
                     </span>
                     <span className="group-card__currency">{group.currency}</span>
-                  </article>
+                    <span className="group-card__arrow" aria-hidden="true">›</span>
+                  </button>
                 ))}
               </div>
             )}
           </section>
 
-          {notice && <p className="dashboard-notice" role="status">{notice}</p>}
           {logoutError && <p className="dashboard-error" role="alert">{logoutError}</p>}
+            </>
+          )}
         </div>
 
         <footer className="dashboard-footer">
           <span>© 2026 Split and Go</span>
-          <span>Feito para aproveitar mais e dividir melhor.</span>
         </footer>
       </section>
 
@@ -378,7 +405,11 @@ function Dashboard({ user, onLogout }) {
             key={item.id}
             type="button"
             aria-current={activeSection === item.id ? 'page' : undefined}
-            onClick={() => setActiveSection(item.id)}
+            onClick={() => {
+              setActiveSection(item.id)
+              setSelectedGroup(null)
+              setNotice('')
+            }}
           >
             <Icon name={item.icon} size={19} />
             <span>{item.label}</span>

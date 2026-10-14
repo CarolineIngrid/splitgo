@@ -51,7 +51,7 @@ class GroupListCreateView(APIView):
     def get(self, request):
         groups = Group.objects.filter(
             memberships__user=request.user,
-        ).prefetch_related('memberships').distinct()
+        ).prefetch_related('memberships__user').distinct()
         serializer = GroupSerializer(
             groups,
             many=True,

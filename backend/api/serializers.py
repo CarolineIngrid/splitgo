@@ -28,13 +28,31 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return User.objects.create_user(**validated_data)
 
 
+class GroupMemberSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.name', read_only=True)
+    is_current_user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GroupMembership
+        fields = ('id', 'name', 'role', 'joined_at', 'is_current_user')
+
+    def get_is_current_user(self, membership):
+        request = self.context.get('request')
+        return bool(
+            request
+            and request.user.is_authenticated
+            and membership.user_id == request.user.pk
+        )
+
+
 class GroupSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     currency = serializers.CharField(max_length=3)
+    members = GroupMemberSerializer(source='memberships', many=True, read_only=True)
 
     class Meta:
         model = Group
-        fields = ('id', 'name', 'currency', 'role', 'created_at')
+        fields = ('id', 'name', 'currency', 'role', 'created_at', 'members')
         read_only_fields = ('id', 'role', 'created_at')
 
     def validate_currency(self, value):
