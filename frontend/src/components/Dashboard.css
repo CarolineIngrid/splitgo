@@ -1033,18 +1033,60 @@
 }
 
 .group-details__simplify-button {
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 12px;
+  display: inline-flex;
+  /* flex: 0 0 auto; */
+  align-items: center;
+  /* justify-content: space-between; */
+  gap: 18px;
+  min-height: 38px;
+  padding: 0 14px;
   border: 1px solid rgb(255 255 255 / 82%);
   border-radius: 18px;
-  background: #fff;
+  background: #ffffff;
   color: #38204f;
-  cursor: not-allowed;
+  cursor: pointer;
   font: inherit;
   font-size: 9px;
   font-weight: 800;
-  opacity: 0.82;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.group-details__simplify-button:focus-visible {
+  outline: 2px solid #38204f;
+  outline-offset: 2px;
+}
+
+.group-details__simplify-button.is-active {
+  border-color: #651292;
+  background: #651292;
+  color: #fff;
+}
+
+.group-details__toggle {
+  display: inline-flex;
+  width: 32px;
+  height: 18px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 10px;
+  background: #b9afc1;
+  transition: background-color 160ms ease;
+}
+
+.group-details__toggle > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.group-details__simplify-button.is-active .group-details__toggle {
+  background: #dcbcf0;
+}
+
+.group-details__simplify-button.is-active .group-details__toggle > span {
+  transform: translateX(14px);
 }
 
 /* .group-details__metric--purple,

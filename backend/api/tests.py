@@ -1,4 +1,4 @@
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -20,6 +20,65 @@ class HealthCheckTests(APITestCase):
         response = self.client.post(reverse('api-health'))
 
         self.assertEqual(response.status_code, 405)
+
+
+class LoginRouteInspectionTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_superuser(
+            email='admin@example.com',
+            name='Administradora',
+            password='SenhaSegura123!',
+        )
+        self.user = user_model.objects.create_user(
+            email='user@example.com',
+            name='Usuária',
+            password='SenhaSegura123!',
+        )
+        self.url = reverse('api-login')
+
+    def test_admin_can_inspect_login_route_in_browser(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(self.url, HTTP_ACCEPT='text/html')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/html', response['Content-Type'])
+        self.assertIn(b'name="email"', response.content)
+        self.assertIn(b'name="password"', response.content)
+
+    def test_login_route_inspection_is_not_available_to_non_admin(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_login_still_authenticates_with_post(self):
+        response = self.client.post(
+            self.url,
+            {'email': self.admin.email, 'password': 'SenhaSegura123!'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['user']['email'], self.admin.email)
+
+    def test_login_post_requires_csrf_token(self):
+        client = APIClient(enforce_csrf_checks=True)
+        payload = {'email': self.admin.email, 'password': 'SenhaSegura123!'}
+
+        rejected_response = client.post(self.url, payload, format='json')
+        csrf_response = client.get(reverse('api-csrf'))
+        accepted_response = client.post(
+            self.url,
+            payload,
+            format='json',
+            HTTP_X_CSRFTOKEN=csrf_response.json()['csrfToken'],
+        )
+
+        self.assertEqual(rejected_response.status_code, 403)
+        self.assertEqual(accepted_response.status_code, 200)
 
 
 class GroupExpenseTests(APITestCase):

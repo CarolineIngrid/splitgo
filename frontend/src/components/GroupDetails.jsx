@@ -37,12 +37,61 @@ function getExpenseIcon(description) {
   return category?.icon ?? '🧾'
 }
 
+function simplifySettlements(memberBalances, members) {
+  const memberNames = new Map(
+    members.map((member) => [String(member.user_id), member.name]),
+  )
+  const debtors = []
+  const creditors = []
+  
+  // memberBalances começa como um Map com todos os membros e saldo 0.
+  // Para cada despesa:
+  // quem pagou recebe crédito: memberBalances[payerId] += valorDaDespesa
+  // cada participante que deve parte da despesa tem seu saldo reduzido: memberBalances[participant] -= valorDaParticipacao
+
+  memberBalances.forEach((balance, userId) => {
+    if (balance < 0) debtors.push({ userId, remaining: Math.abs(balance) })
+    if (balance > 0) creditors.push({ userId, remaining: balance })
+  })
+
+  debtors.sort((first, second) => second.remaining - first.remaining)
+  creditors.sort((first, second) => second.remaining - first.remaining)
+
+  // Compensate net debts against credits so indirect chains become direct transfers.
+  const settlements = []
+  let debtorIndex = 0
+  let creditorIndex = 0
+
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    const debtor = debtors[debtorIndex]
+    const creditor = creditors[creditorIndex]
+    const amount = Math.min(debtor.remaining, creditor.remaining)
+
+    if (amount > 0) {
+      settlements.push({
+        id: `${debtor.userId}:${creditor.userId}`,
+        debtor: memberNames.get(debtor.userId) ?? 'Participante',
+        creditor: memberNames.get(creditor.userId) ?? 'Participante',
+        amount: amount / 100,
+      })
+    }
+
+    debtor.remaining -= amount
+    creditor.remaining -= amount
+    if (debtor.remaining === 0) debtorIndex += 1
+    if (creditor.remaining === 0) creditorIndex += 1
+  }
+
+  return settlements
+}
+
 function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [expenses, setExpenses] = useState([])
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true)
   const [expensesError, setExpensesError] = useState('')
   const [isCreatingExpense, setIsCreatingExpense] = useState(false)
   const [isAddingMembers, setIsAddingMembers] = useState(false)
+  const [isSimplificationEnabled, setIsSimplificationEnabled] = useState(false)
   const [expenseNotice, setExpenseNotice] = useState('')
   const [memberNotice, setMemberNotice] = useState('')
   const members = group.members ?? []
@@ -90,6 +139,9 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
       }]
     })
     .sort((first, second) => second.amount - first.amount)
+  const displayedDebts = isSimplificationEnabled
+    ? simplifySettlements(memberBalances, members)
+    : pairwiseDebts
   const formattedCreatedAt = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'long',
   }).format(new Date(group.created_at))
@@ -159,14 +211,16 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
       <section className="group-details__summary" aria-label="Resumo do grupo">
         <article className="group-details__simplify-card">
           <div className="group-details__simplify-copy">
-            <span className="group-details__metric-label">Acertos entre participantes</span>
+            <span className="group-details__metric-label">
+              {isSimplificationEnabled ? 'Acertos simplificados' : 'Acertos entre participantes'}
+            </span>
             {isLoadingExpenses ? (
               <p role="status">Calculando acertos...</p>
             ) : expensesError ? (
               <p role="alert">Não foi possível carregar os acertos.</p>
-            ) : pairwiseDebts.length ? (
+            ) : displayedDebts.length ? (
               <ul className="group-details__debt-list">
-                {pairwiseDebts.map((debt) => (
+                {displayedDebts.map((debt) => (
                   <li key={debt.id}>
                     <span>{debt.debtor} deve</span>
                     <strong>{formatCurrency(debt.amount, group.currency)}</strong>
@@ -179,12 +233,15 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             )}
           </div>
           <button
-            className="group-details__simplify-button"
+            className={`group-details__simplify-button ${isSimplificationEnabled ? 'is-active' : ''}`}
             type="button"
-            disabled
-            title="Disponível em breve"
+            aria-pressed={isSimplificationEnabled}
+            onClick={() => setIsSimplificationEnabled((enabled) => !enabled)}
           >
-            Simplificar despesas
+            <span>Simplificar despesas</span>
+            <span className="group-details__toggle" aria-hidden="true">
+              <span />
+            </span>
           </button>
         </article>
         <article className="group-details__metric group-details__metric--purple">
@@ -196,11 +253,6 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
               : 'Nenhuma despesa registrada'}
           </small>
         </article>
-        {/* <article className="group-details__metric group-details__metric--peach">
-          <span className="group-details__metric-label">Despesas</span>
-          <strong>{expenses.length}</strong>
-          <small>lançamentos no grupo</small>
-        </article> */}
       </section>
 
       <div className="group-details__columns">
@@ -314,7 +366,7 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             ))}
           </ul>
           {memberNotice && <p className="group-details__expense-notice" role="status">{memberNotice}</p>}
-          <section className="group-details__balance-summary" aria-labelledby="group-balances-title">
+          {/* <section className="group-details__balance-summary" aria-labelledby="group-balances-title">
             <h3 id="group-balances-title">Saldos calculados</h3>
             {isLoadingExpenses ? (
               <small role="status">Calculando saldos...</small>
@@ -336,7 +388,7 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
                   </div>
                 )
               })}
-          </section>
+          </section> */}
         </section>
       </div>
       {isCreatingExpense && (

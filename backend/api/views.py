@@ -1,17 +1,17 @@
-import json
-
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from rest_framework import status
 from rest_framework.decorators import api_view
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .auth_serializers import AuthenticatedUserSerializer
+from .auth_serializers import AuthenticatedUserSerializer, LoginSerializer
 from .models import Expense, Group, GroupMembership, SUPPORTED_CURRENCIES, User
 from .serializers import (
     AddGroupMemberSerializer,
@@ -185,34 +185,43 @@ def csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
 
 
-@require_POST
-@csrf_protect
-def login_user(request):
-    try:
-        credentials = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse(
-            {'detail': 'O corpo da solicitação deve ser um JSON válido.'},
-            status=400,
-        )
+@method_decorator(csrf_protect, name='dispatch')
+class UserLoginView(GenericAPIView):
+    serializer_class = LoginSerializer
 
-    email = credentials.get('email') if isinstance(credentials, dict) else None
-    password = credentials.get('password') if isinstance(credentials, dict) else None
-    if not isinstance(email, str) or not isinstance(password, str):
-        return JsonResponse(
-            {'detail': 'Informe o e-mail e a senha.'},
-            status=400,
-        )
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAdminUser()]
+        return [AllowAny()]
 
-    user = authenticate(request, username=email, password=password)
-    if user is None:
-        return JsonResponse(
-            {'detail': 'E-mail ou senha inválidos.'},
-            status=400,
-        )
+    def get(self, request):
+        return Response({
+            'name': 'api-login',
+            'path': request.path,
+            'method': 'POST',
+            'description': 'Autentica um usuário e inicia uma sessão.',
+            'request_body': {
+                'email': 'E-mail cadastrado.',
+                'password': 'Senha da conta.',
+            },
+        })
 
-    login(request, user)
-    return JsonResponse({'user': AuthenticatedUserSerializer(user).data})
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = authenticate(
+            request,
+            username=serializer.validated_data['email'],
+            password=serializer.validated_data['password'],
+        )
+        if user is None:
+            return Response(
+                {'detail': 'E-mail ou senha inválidos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        login(request, user)
+        return Response({'user': AuthenticatedUserSerializer(user).data})
 
 
 @api_view(['GET'])

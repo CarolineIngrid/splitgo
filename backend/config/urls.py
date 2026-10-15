@@ -26,15 +26,15 @@ from api.views import (
     csrf_token,
     current_user,
     health_check,
-    login_user,
     logout_user,
+    UserLoginView,
 )
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='api-health'),
     path('api/auth/csrf/', csrf_token, name='api-csrf'),
-    path('api/auth/login/', login_user, name='api-login'),
+    path('api/auth/login/', UserLoginView.as_view(), name='api-login'),
     path('api/auth/session/', current_user, name='api-session'),
     path('api/auth/logout/', logout_user, name='api-logout'),
     path('api/groups/currencies/', available_currencies, name='api-group-currencies'),
