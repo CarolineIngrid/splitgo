@@ -12,13 +12,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .auth_serializers import AuthenticatedUserSerializer, LoginSerializer
-from .models import Expense, Group, GroupMembership, SUPPORTED_CURRENCIES, User
+from .models import Expense, Group, GroupMembership, GroupPayment, SUPPORTED_CURRENCIES, User
 from .serializers import (
     AddGroupMemberSerializer,
     AvailableGroupMemberSerializer,
     ExpenseCreateSerializer,
     ExpenseDetailSerializer,
     GroupMemberSerializer,
+    GroupPaymentCreateSerializer,
+    GroupPaymentDetailSerializer,
     GroupSerializer,
     UserRegistrationSerializer,
 )
@@ -117,6 +119,44 @@ class GroupExpenseListCreateView(APIView):
         expense = serializer.save()
         return Response(
             ExpenseDetailSerializer(expense).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupPaymentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        payments = group.payments.select_related('paid_by', 'paid_to')
+        return Response(GroupPaymentDetailSerializer(payments, many=True).data)
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = GroupPaymentCreateSerializer(
+            data=request.data,
+            context={'group': group},
+        )
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        return Response(
+            GroupPaymentDetailSerializer(payment).data,
             status=status.HTTP_201_CREATED,
         )
 

@@ -10,6 +10,7 @@ from .models import (
     ExpenseShare,
     Group,
     GroupMembership,
+    GroupPayment,
     SUPPORTED_CURRENCIES,
     User,
 )
@@ -302,5 +303,115 @@ class ExpenseDetailSerializer(serializers.ModelSerializer):
             'paid_by_name',
             'split_type',
             'participants',
+            'created_at',
+        )
+
+
+class GroupPaymentCreateSerializer(serializers.ModelSerializer):
+    paid_by = serializers.UUIDField()
+    paid_to = serializers.UUIDField()
+
+    class Meta:
+        model = GroupPayment
+        fields = ('description', 'amount', 'paid_by', 'paid_to')
+
+    def validate_description(self, value):
+        description = value.strip()
+        if not description:
+            return 'Pagamento'
+        return description
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('O valor do pagamento deve ser maior que zero.')
+        return value
+
+    def _pairwise_debts(self, group):
+        debts = {}
+        for expense in group.expenses.select_related('paid_by').prefetch_related('shares__user'):
+            payer_id = str(expense.paid_by_id)
+            for share in expense.shares.all():
+                debtor_id = str(share.user_id)
+                if debtor_id == payer_id:
+                    continue
+                first_id, second_id = sorted([debtor_id, payer_id])
+                key = (first_id, second_id)
+                delta = Decimal(str(share.amount))
+                debts[key] = debts.get(key, Decimal('0')) + (delta if debtor_id == first_id else -delta)
+
+        for payment in group.payments.select_related('paid_by', 'paid_to'):
+            payer_id = str(payment.paid_by_id)
+            recipient_id = str(payment.paid_to_id)
+            first_id, second_id = sorted([payer_id, recipient_id])
+            key = (first_id, second_id)
+            delta = Decimal(str(payment.amount))
+            debts[key] = debts.get(key, Decimal('0')) - (delta if payer_id == first_id else -delta)
+
+        return debts
+
+    def validate(self, attrs):
+        group = self.context['group']
+        payer_id = str(attrs['paid_by'])
+        recipient_id = str(attrs['paid_to'])
+
+        if payer_id == recipient_id:
+            raise serializers.ValidationError({
+                'paid_to': 'O pagamento precisa ser emitido para outra pessoa do grupo.',
+            })
+
+        member_ids = set(
+            GroupMembership.objects.filter(
+                group=group,
+                user_id__in=[attrs['paid_by'], attrs['paid_to']],
+            ).values_list('user_id', flat=True)
+        )
+        if attrs['paid_by'] not in member_ids:
+            raise serializers.ValidationError({
+                'paid_by': 'Quem pagou precisa participar do grupo.',
+            })
+        if attrs['paid_to'] not in member_ids:
+            raise serializers.ValidationError({
+                'paid_to': 'Quem recebeu o pagamento precisa participar do grupo.',
+            })
+
+        pair_key = tuple(sorted([payer_id, recipient_id]))
+        pair_balance = self._pairwise_debts(group).get(pair_key, Decimal('0'))
+        max_allowed = pair_balance if payer_id == pair_key[0] else -pair_balance
+        max_allowed = max(Decimal('0'), max_allowed)
+
+        if attrs['amount'] > max_allowed:
+            raise serializers.ValidationError({
+                'amount': f'Você só pode registrar até {max_allowed} {group.currency} neste pagamento.',
+            })
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        group = self.context['group']
+        return GroupPayment.objects.create(
+            group=group,
+            paid_by=User.objects.get(pk=validated_data.pop('paid_by')),
+            paid_to=User.objects.get(pk=validated_data.pop('paid_to')),
+            **validated_data,
+        )
+
+
+class GroupPaymentDetailSerializer(serializers.ModelSerializer):
+    paid_by_id = serializers.UUIDField(source='paid_by.id', read_only=True)
+    paid_by_name = serializers.CharField(source='paid_by.name', read_only=True)
+    paid_to_id = serializers.UUIDField(source='paid_to.id', read_only=True)
+    paid_to_name = serializers.CharField(source='paid_to.name', read_only=True)
+
+    class Meta:
+        model = GroupPayment
+        fields = (
+            'id',
+            'description',
+            'amount',
+            'paid_by_id',
+            'paid_by_name',
+            'paid_to_id',
+            'paid_to_name',
             'created_at',
         )

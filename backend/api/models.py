@@ -25,7 +25,10 @@ class UserManager(BaseUserManager):
             name=name,
             **extra_fields,
         )
-        user.set_password(password)
+        if password is not None:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
         user.save(using=self._db)
         return user
 
@@ -183,3 +186,32 @@ class ExpenseShare(models.Model):
 
     def __str__(self):
         return f'{self.user.name} - {self.expense.description}'
+
+
+class GroupPayment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name='payments',
+    )
+    paid_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='payments_made',
+    )
+    paid_to = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='payments_received',
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'group_payments'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.paid_by.name} pagou {self.amount} para {self.paid_to.name}'

@@ -831,13 +831,6 @@
   isolation: isolate;
   overflow: hidden;
   min-height: calc(100vh - 118px);
-  border: 1px solid #eee9f5;
-  /* border-radius: 20px; */
-  background:
-    radial-gradient(ellipse at 12% 12%, rgb(177 117 255 / 35%), transparent 36%),
-    radial-gradient(ellipse at 86% 30%, rgba(86, 188, 231, 0.19), transparent 34%),
-    radial-gradient(ellipse at 70% 86%, rgb(255 104 217 / 20%), transparent 37%),
-    linear-gradient(145deg, #381d5a 0%, #492074 48%, #3e1864 100%);
   color: #fff;
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
 }
@@ -883,8 +876,8 @@
   justify-content: space-between;
   gap: 20px;
   padding: 54px clamp(22px, 5vw, 56px) 34px;
-  border: 0;
-  border-radius: 0;
+  /* border: 0;
+  border-radius: 0; */
   /* background:
     radial-gradient(circle at 82% 18%, rgb(99 220 255 / 16%), transparent 25%),
     linear-gradient(110deg, rgb(31 12 52 / 82%), rgb(77 34 116 / 58%)); */
@@ -954,7 +947,7 @@
   display: grid;
   width: calc(100% - 32px);
   max-width: 1120px;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(120px, 0.65fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   gap: 12px;
   margin: 0 auto;
   position: relative;

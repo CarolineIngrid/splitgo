@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import ExpenseCreationDialog from './ExpenseCreationDialog.jsx'
 import GroupMemberDialog from './GroupMemberDialog.jsx'
+import PaymentCreationDialog from './PaymentCreationDialog.jsx'
 
 function formatCurrency(amount, currency) {
   return new Intl.NumberFormat('pt-BR', {
@@ -87,9 +88,13 @@ function simplifySettlements(memberBalances, members) {
 
 function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [expenses, setExpenses] = useState([])
+  const [payments, setPayments] = useState([])
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true)
+  const [isLoadingPayments, setIsLoadingPayments] = useState(true)
   const [expensesError, setExpensesError] = useState('')
+  const [paymentsError, setPaymentsError] = useState('')
   const [isCreatingExpense, setIsCreatingExpense] = useState(false)
+  const [isCreatingPayment, setIsCreatingPayment] = useState(false)
   const [isAddingMembers, setIsAddingMembers] = useState(false)
   const [isSimplificationEnabled, setIsSimplificationEnabled] = useState(false)
   const [expenseNotice, setExpenseNotice] = useState('')
@@ -124,6 +129,27 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
       )
     })
   })
+
+  payments.forEach((payment) => {
+    const payerId = String(payment.paid_by_id)
+    const recipientId = String(payment.paid_to_id)
+    const cents = Math.round(Number(payment.amount) * 100)
+
+    if (memberBalances.has(payerId)) {
+      memberBalances.set(payerId, memberBalances.get(payerId) + cents)
+    }
+    if (memberBalances.has(recipientId)) {
+      memberBalances.set(recipientId, memberBalances.get(recipientId) - cents)
+    }
+
+    const [firstId, secondId] = [payerId, recipientId].sort()
+    const pairKey = `${firstId}:${secondId}`
+    const debtDirection = payerId === firstId ? 1 : -1
+    pairBalances.set(
+      pairKey,
+      (pairBalances.get(pairKey) ?? 0) - cents * debtDirection,
+    )
+  })
   const pairwiseDebts = [...pairBalances.entries()]
     .flatMap(([pairKey, balance]) => {
       if (balance === 0) return []
@@ -149,18 +175,29 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   useEffect(() => {
     let isCurrent = true
 
-    apiRequest(`/api/groups/${group.id}/expenses/`)
-      .then((result) => {
+    Promise.all([
+      apiRequest(`/api/groups/${group.id}/expenses/`),
+      apiRequest(`/api/groups/${group.id}/payments/`),
+    ])
+      .then(([expensesResult, paymentsResult]) => {
         if (isCurrent) {
-          setExpenses(result)
+          setExpenses(expensesResult)
+          setPayments(paymentsResult)
           setExpensesError('')
+          setPaymentsError('')
         }
       })
       .catch((error) => {
-        if (isCurrent) setExpensesError(error.message)
+        if (isCurrent) {
+          setExpensesError(error.message)
+          setPaymentsError(error.message)
+        }
       })
       .finally(() => {
-        if (isCurrent) setIsLoadingExpenses(false)
+        if (isCurrent) {
+          setIsLoadingExpenses(false)
+          setIsLoadingPayments(false)
+        }
       })
 
     return () => {
@@ -172,6 +209,12 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
     setExpenses((currentExpenses) => [expense, ...currentExpenses])
     setIsCreatingExpense(false)
     setExpenseNotice('Despesa registrada com sucesso.')
+  }
+
+  function handlePaymentCreated(payment) {
+    setPayments((currentPayments) => [payment, ...currentPayments])
+    setIsCreatingPayment(false)
+    setExpenseNotice('Pagamento registrado com sucesso.')
   }
 
   function handleMemberAdded(membership) {
@@ -187,6 +230,15 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
       .then(setExpenses)
       .catch((error) => setExpensesError(error.message))
       .finally(() => setIsLoadingExpenses(false))
+  }
+
+  function handleRetryPayments() {
+    setIsLoadingPayments(true)
+    setPaymentsError('')
+    apiRequest(`/api/groups/${group.id}/payments/`)
+      .then(setPayments)
+      .catch((error) => setPaymentsError(error.message))
+      .finally(() => setIsLoadingPayments(false))
   }
 
   return (
@@ -252,6 +304,22 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
               ? `${expenses.length} ${expenses.length === 1 ? 'despesa registrada' : 'despesas registradas'}`
               : 'Nenhuma despesa registrada'}
           </small>
+          <button
+            className="group-details__add-expense"
+            type="button"
+            onClick={() => setIsCreatingPayment(true)}
+            style={{ marginTop: '1rem', width: '100%' }}
+          >
+            <span aria-hidden="true">+</span>
+            Registrar pagamento
+          </button>
+          {isLoadingPayments ? (
+            <small role="status" style={{ display: 'block', marginTop: '0.75rem' }}>Carregando pagamentos...</small>
+          ) : paymentsError ? (
+            <small role="alert" style={{ display: 'block', marginTop: '0.75rem' }}>
+              Não foi possível carregar pagamentos.
+            </small>
+          ) : null}
         </article>
       </section>
 
@@ -396,6 +464,13 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
           group={group}
           onClose={() => setIsCreatingExpense(false)}
           onCreated={handleExpenseCreated}
+        />
+      )}
+      {isCreatingPayment && (
+        <PaymentCreationDialog
+          group={group}
+          onClose={() => setIsCreatingPayment(false)}
+          onCreated={handlePaymentCreated}
         />
       )}
       {isAddingMembers && (

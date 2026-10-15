@@ -272,6 +272,111 @@ class GroupExpenseTests(APITestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class GroupPaymentTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.payer = user_model.objects.create_user(
+            email='payer-payment@example.com',
+            name='Pagador',
+            password='SenhaSegura123!',
+        )
+        self.member = user_model.objects.create_user(
+            email='member-payment@example.com',
+            name='Recebedor',
+            password='SenhaSegura123!',
+        )
+        self.outsider = user_model.objects.create_user(
+            email='outsider-payment@example.com',
+            name='Fora do Grupo',
+            password='SenhaSegura123!',
+        )
+        self.group = Group.objects.create(name='Casa', currency='BRL')
+        GroupMembership.objects.create(group=self.group, user=self.payer, role=GroupMembership.Role.ADMIN)
+        GroupMembership.objects.create(group=self.group, user=self.member)
+        self.client.force_authenticate(self.payer)
+        self.url = reverse('api-group-payments', args=[self.group.pk])
+
+    def test_register_payment_reduces_direct_debt(self):
+        expense_url = reverse('api-group-expenses', args=[self.group.pk])
+        self.client.post(
+            expense_url,
+            {
+                'description': 'Conta de casa',
+                'amount': '100.00',
+                'paid_by': str(self.payer.pk),
+                'split_type': 'equal',
+                'participants': [
+                    {'user_id': str(self.payer.pk)},
+                    {'user_id': str(self.member.pk)},
+                ],
+            },
+            format='json',
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                'description': 'Pagamento do jantar',
+                'amount': '30.00',
+                'paid_by': str(self.payer.pk),
+                'paid_to': str(self.member.pk),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['amount'], '30.00')
+        self.assertEqual(response.data['paid_by_id'], str(self.payer.pk))
+        self.assertEqual(response.data['paid_to_id'], str(self.member.pk))
+
+    def test_payment_cannot_exceed_current_debt(self):
+        expense_url = reverse('api-group-expenses', args=[self.group.pk])
+        self.client.post(
+            expense_url,
+            {
+                'description': 'Conta de casa',
+                'amount': '50.00',
+                'paid_by': str(self.payer.pk),
+                'split_type': 'equal',
+                'participants': [
+                    {'user_id': str(self.payer.pk)},
+                    {'user_id': str(self.member.pk)},
+                ],
+            },
+            format='json',
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                'description': 'Pagamento maior',
+                'amount': '100.00',
+                'paid_by': str(self.payer.pk),
+                'paid_to': str(self.member.pk),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Você só pode registrar até', response.data['amount'][0])
+
+    def test_non_member_cannot_register_group_payment(self):
+        self.client.force_authenticate(self.outsider)
+
+        response = self.client.post(
+            self.url,
+            {
+                'description': 'Pagamento fora do grupo',
+                'amount': '10.00',
+                'paid_by': str(self.payer.pk),
+                'paid_to': str(self.member.pk),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+
 class GroupMemberManagementTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()

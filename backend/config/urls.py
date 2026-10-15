@@ -21,6 +21,7 @@ from api.views import (
     GroupListCreateView,
     GroupExpenseListCreateView,
     GroupMemberListCreateView,
+    GroupPaymentListCreateView,
     UserRegistrationView,
     available_currencies,
     csrf_token,
@@ -43,6 +44,11 @@ urlpatterns = [
         'api/groups/<uuid:group_id>/expenses/',
         GroupExpenseListCreateView.as_view(),
         name='api-group-expenses',
+    ),
+    path(
+        'api/groups/<uuid:group_id>/payments/',
+        GroupPaymentListCreateView.as_view(),
+        name='api-group-payments',
     ),
     path(
         'api/groups/<uuid:group_id>/members/',
