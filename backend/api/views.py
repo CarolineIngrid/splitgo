@@ -1,19 +1,29 @@
-import json
-
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from rest_framework import status
 from rest_framework.decorators import api_view
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .auth_serializers import AuthenticatedUserSerializer
-from .models import Group, SUPPORTED_CURRENCIES, User
-from .serializers import GroupSerializer, UserRegistrationSerializer
+from .auth_serializers import AuthenticatedUserSerializer, LoginSerializer
+from .models import Expense, Group, GroupMembership, GroupPayment, SUPPORTED_CURRENCIES, User
+from .serializers import (
+    AddGroupMemberSerializer,
+    AvailableGroupMemberSerializer,
+    ExpenseCreateSerializer,
+    ExpenseDetailSerializer,
+    GroupMemberSerializer,
+    GroupPaymentCreateSerializer,
+    GroupPaymentDetailSerializer,
+    GroupSerializer,
+    UserRegistrationSerializer,
+)
 
 
 @api_view(['GET'])
@@ -72,6 +82,156 @@ class GroupListCreateView(APIView):
         )
 
 
+class GroupExpenseListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        # Filtrar pela participação impede consultar ou alterar grupos alheios.
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        expenses = group.expenses.select_related('paid_by').prefetch_related(
+            'shares__user',
+        )
+        return Response(ExpenseDetailSerializer(expenses, many=True).data)
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = ExpenseCreateSerializer(
+            data=request.data,
+            context={'group': group, 'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        expense = serializer.save()
+        return Response(
+            ExpenseDetailSerializer(expense).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request, group_id, expense_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        expense = group.expenses.filter(pk=expense_id).first()
+        if expense is None:
+            return Response(
+                {'detail': 'Despesa não encontrada.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if expense.created_by_id != request.user.pk:
+            return Response(
+                {'detail': 'Somente quem registrou a despesa pode excluí-la.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        expense.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GroupPaymentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        payments = group.payments.select_related('paid_by', 'paid_to')
+        return Response(GroupPaymentDetailSerializer(payments, many=True).data)
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = GroupPaymentCreateSerializer(
+            data=request.data,
+            context={'group': group},
+        )
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        return Response(
+            GroupPaymentDetailSerializer(payment).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GroupMemberListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_group(self, group_id, user):
+        # Somente integrantes atuais podem consultar ou alterar a composição do grupo.
+        return Group.objects.filter(
+            pk=group_id,
+            memberships__user=user,
+        ).first()
+
+    def get(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        available_users = User.objects.exclude(
+            group_memberships__group=group,
+        ).order_by('name', 'email')
+        return Response(
+            AvailableGroupMemberSerializer(available_users, many=True).data,
+        )
+
+    def post(self, request, group_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = AddGroupMemberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership, created = GroupMembership.objects.get_or_create(
+            group=group,
+            user=serializer.validated_data['user'],
+            defaults={'role': GroupMembership.Role.MEMBER},
+        )
+        return Response(
+            GroupMemberSerializer(
+                membership,
+                context={'request': request},
+            ).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
 @api_view(['GET'])
 def available_currencies(request):
     currencies = [
@@ -87,34 +247,43 @@ def csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
 
 
-@require_POST
-@csrf_protect
-def login_user(request):
-    try:
-        credentials = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse(
-            {'detail': 'O corpo da solicitação deve ser um JSON válido.'},
-            status=400,
-        )
+@method_decorator(csrf_protect, name='dispatch')
+class UserLoginView(GenericAPIView):
+    serializer_class = LoginSerializer
 
-    email = credentials.get('email') if isinstance(credentials, dict) else None
-    password = credentials.get('password') if isinstance(credentials, dict) else None
-    if not isinstance(email, str) or not isinstance(password, str):
-        return JsonResponse(
-            {'detail': 'Informe o e-mail e a senha.'},
-            status=400,
-        )
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAdminUser()]
+        return [AllowAny()]
 
-    user = authenticate(request, username=email, password=password)
-    if user is None:
-        return JsonResponse(
-            {'detail': 'E-mail ou senha inválidos.'},
-            status=400,
-        )
+    def get(self, request):
+        return Response({
+            'name': 'api-login',
+            'path': request.path,
+            'method': 'POST',
+            'description': 'Autentica um usuário e inicia uma sessão.',
+            'request_body': {
+                'email': 'E-mail cadastrado.',
+                'password': 'Senha da conta.',
+            },
+        })
 
-    login(request, user)
-    return JsonResponse({'user': AuthenticatedUserSerializer(user).data})
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = authenticate(
+            request,
+            username=serializer.validated_data['email'],
+            password=serializer.validated_data['password'],
+        )
+        if user is None:
+            return Response(
+                {'detail': 'E-mail ou senha inválidos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        login(request, user)
+        return Response({'user': AuthenticatedUserSerializer(user).data})
 
 
 @api_view(['GET'])

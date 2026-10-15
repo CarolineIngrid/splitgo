@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 
-from .models import Group, GroupMembership, User
+from .models import Expense, ExpenseShare, Group, GroupMembership, User
 
 
 class GroupMembershipInline(admin.TabularInline):
@@ -16,6 +16,19 @@ class GroupAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     list_filter = ('currency',)
     inlines = (GroupMembershipInline,)
+
+
+class ExpenseShareInline(admin.TabularInline):
+    model = ExpenseShare
+    extra = 0
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ('description', 'group', 'amount', 'paid_by', 'created_at')
+    search_fields = ('description', 'group__name', 'paid_by__name')
+    list_filter = ('split_type', 'created_at')
+    inlines = (ExpenseShareInline,)
 
 
 class AdminUserCreationForm(UserCreationForm):

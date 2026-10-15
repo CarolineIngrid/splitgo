@@ -191,6 +191,15 @@ function Dashboard({ user, onLogout }) {
     setNotice(`Grupo “${group.name}” criado com sucesso.`)
   }
 
+  function handleGroupMembersUpdated(members) {
+    setSelectedGroup((currentGroup) => currentGroup
+      ? { ...currentGroup, members }
+      : currentGroup)
+    setGroups((currentGroups) => currentGroups.map((group) => (
+      group.id === selectedGroup?.id ? { ...group, members } : group
+    )))
+  }
+
   return (
     <main className={`dashboard ${isSidebarCollapsed ? 'dashboard--sidebar-collapsed' : ''}`}>
       <aside className="dashboard-sidebar" aria-label="Menu principal">
@@ -221,10 +230,10 @@ function Dashboard({ user, onLogout }) {
             </svg>
           </button>
         </div>
-        <div className="dashboard-workspace">
+        {/* <div className="dashboard-workspace">
           <span className="workspace-avatar">S</span>
           <span><strong>Meu espaço</strong><small>Área pessoal</small></span>
-        </div>
+        </div> */}
 
         <p className="dashboard-nav-label">MENU</p>
         <nav className="dashboard-nav" aria-label="Navegação">
@@ -291,8 +300,10 @@ function Dashboard({ user, onLogout }) {
           {notice && <p className="dashboard-notice" role="status">{notice}</p>}
           {selectedGroup ? (
             <GroupDetails
+              key={selectedGroup.id}
               group={selectedGroup}
               onBack={() => setSelectedGroup(null)}
+              onMembersUpdated={handleGroupMembersUpdated}
             />
           ) : (
             <>
