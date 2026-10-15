@@ -113,7 +113,7 @@ class GroupExpenseListCreateView(APIView):
             )
         serializer = ExpenseCreateSerializer(
             data=request.data,
-            context={'group': group},
+            context={'group': group, 'request': request},
         )
         serializer.is_valid(raise_exception=True)
         expense = serializer.save()
@@ -121,6 +121,28 @@ class GroupExpenseListCreateView(APIView):
             ExpenseDetailSerializer(expense).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def delete(self, request, group_id, expense_id):
+        group = self.get_group(group_id, request.user)
+        if group is None:
+            return Response(
+                {'detail': 'Grupo não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        expense = group.expenses.filter(pk=expense_id).first()
+        if expense is None:
+            return Response(
+                {'detail': 'Despesa não encontrada.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if expense.created_by_id != request.user.pk:
+            return Response(
+                {'detail': 'Somente quem registrou a despesa pode excluí-la.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        expense.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class GroupPaymentListCreateView(APIView):

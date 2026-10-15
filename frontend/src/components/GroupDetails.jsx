@@ -109,10 +109,31 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [isAddingMembers, setIsAddingMembers] = useState(false)
   const [isSimplificationEnabled, setIsSimplificationEnabled] = useState(false)
   const [expenseNotice, setExpenseNotice] = useState('')
+  const [expenseActionError, setExpenseActionError] = useState('')
+  const [deletingExpenseId, setDeletingExpenseId] = useState('')
   const [memberNotice, setMemberNotice] = useState('')
   const members = group.members ?? []
   const currentUserId = members.find((member) => member.is_current_user)?.user_id
   const totalExpenses = expenses.reduce((total, expense) => total + Number(expense.amount), 0)
+  const currentUserPaidCents = expenses.reduce(
+    (total, expense) => total + (
+      String(expense.paid_by_id) === String(currentUserId)
+        ? Math.round(Number(expense.amount) * 100)
+        : 0
+    ),
+    0,
+  )
+  const currentUserShareCents = expenses.reduce(
+    (total, expense) => total + expense.participants.reduce(
+      (participantTotal, participant) => participantTotal + (
+        String(participant.user_id) === String(currentUserId)
+          ? Math.round(Number(participant.amount) * 100)
+          : 0
+      ),
+      0,
+    ),
+    0,
+  )
   const memberNames = new Map(members.map((member) => [String(member.user_id), member.name]))
   const memberBalances = new Map(members.map((member) => [String(member.user_id), 0]))
   const pairBalances = new Map()
@@ -182,6 +203,7 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   const displayedDebts = isSimplificationEnabled
     ? simplifySettlements(memberBalances, members, currentUserId)
     : pairwiseDebts
+  const currentUserBalanceCents = memberBalances.get(String(currentUserId)) ?? 0
   const formattedCreatedAt = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'long',
   }).format(new Date(group.created_at))
@@ -222,7 +244,33 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   function handleExpenseCreated(expense) {
     setExpenses((currentExpenses) => [expense, ...currentExpenses])
     setIsCreatingExpense(false)
+    setExpenseActionError('')
     setExpenseNotice('Despesa registrada com sucesso.')
+  }
+
+  async function handleExpenseDelete(expense) {
+    const confirmed = window.confirm(
+      `Deseja mesmo apagar a despesa "${expense.description}"? O valor será removido do total e dos acertos do grupo.`,
+    )
+    if (!confirmed) return
+
+    setDeletingExpenseId(expense.id)
+    setExpenseActionError('')
+    setExpenseNotice('')
+    try {
+      await apiRequest(
+        `/api/groups/${group.id}/expenses/${expense.id}/`,
+        { method: 'DELETE' },
+      )
+      setExpenses((currentExpenses) => (
+        currentExpenses.filter((currentExpense) => currentExpense.id !== expense.id)
+      ))
+      setExpenseNotice('Despesa excluída. O total e os acertos foram atualizados.')
+    } catch (error) {
+      setExpenseActionError(error.message)
+    } finally {
+      setDeletingExpenseId('')
+    }
   }
 
   function handlePaymentCreated(payment) {
@@ -318,14 +366,50 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             </span>
           </button>
         </article>
-        <article className="group-details__metric group-details__metric--purple">
-          <span className="group-details__metric-label">Total de despesas</span>
-          <strong>{formatCurrency(totalExpenses, group.currency)}</strong>
-          <small>
-            {expenses.length
-              ? `${expenses.length} ${expenses.length === 1 ? 'despesa registrada' : 'despesas registradas'}`
-              : 'Nenhuma despesa registrada'}
-          </small>
+        <article className="group-details__statement" aria-labelledby="group-statement-title">
+          <h2 id="group-statement-title">Meu extrato</h2>
+          {isLoadingExpenses || isLoadingPayments ? (
+            <p className="group-details__statement-message" role="status">
+              Carregando extrato...
+            </p>
+          ) : expensesError || paymentsError ? (
+            <p className="group-details__statement-message" role="alert">
+              Não foi possível carregar o extrato.
+            </p>
+          ) : (
+            <>
+              <dl className="group-details__statement-breakdown">
+                <div>
+                  <dt>Despesas pagas por mim</dt>
+                  <dd>{formatCurrency(currentUserPaidCents / 100, group.currency)}</dd>
+                </div>
+                <div>
+                  <dt>Sua participação nas despesas</dt>
+                  <dd>{formatCurrency(currentUserShareCents / 100, group.currency)}</dd>
+                </div>
+              </dl>
+              <dl className="group-details__statement-balance">
+                <div className="is-positive">
+                  <dt>
+                    <strong>Tenho a receber</strong>
+                    <small>Saldo líquido positivo</small>
+                  </dt>
+                  <dd>
+                    {formatCurrency(Math.max(currentUserBalanceCents, 0) / 100, group.currency)}
+                  </dd>
+                </div>
+                <div className="is-negative">
+                  <dt>
+                    <strong>Tenho a pagar</strong>
+                    <small>Saldo líquido negativo</small>
+                  </dt>
+                  <dd>
+                    {formatCurrency(Math.max(-currentUserBalanceCents, 0) / 100, group.currency)}
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
           <button
             className="group-details__add-expense"
             type="button"
@@ -335,6 +419,16 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             <span aria-hidden="true">+</span>
             Registrar pagamento
           </button>
+        </article>
+        <article className="group-details__metric group-details__metric--purple">
+          <span className="group-details__metric-label">Total de despesas</span>
+          <strong>{formatCurrency(totalExpenses, group.currency)}</strong>
+          <small>
+            {expenses.length
+              ? `${expenses.length} ${expenses.length === 1 ? 'despesa registrada' : 'despesas registradas'}`
+              : 'Nenhuma despesa registrada'}
+          </small>
+          
           {isLoadingPayments ? (
             <small role="status" style={{ display: 'block', marginTop: '0.75rem' }}>Carregando pagamentos...</small>
           ) : paymentsError ? (
@@ -342,18 +436,7 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
               Não foi possível carregar pagamentos.
             </small>
           ) : null}
-        </article>
-      </section>
-
-      <div className="group-details__columns">
-        <section className="group-details__panel" aria-labelledby="group-expenses-title">
-          <div className="group-details__section-heading">
-            <div>
-              <h2 id="group-expenses-title">Despesas</h2>
-              <p>Os gastos compartilhados aparecerão aqui.</p>
-            </div>
-            <div className="group-details__expense-actions">
-              <span className="group-details__section-count">{expenses.length}</span>
+          <div className="group-details__expense-actions">
               <button
                 className="group-details__add-expense"
                 type="button"
@@ -366,6 +449,17 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
                 Adicionar despesa
               </button>
             </div>
+        </article>
+      </section>
+
+      <div className="group-details__columns">
+        <section className="group-details__panel" aria-labelledby="group-expenses-title">
+          <div className="group-details__section-heading">
+            <div>
+              <h2 id="group-expenses-title">Despesas</h2>
+              <p>Os gastos compartilhados aparecerão aqui.</p>
+            </div>
+            
           </div>
           {isLoadingExpenses ? (
             <p className="group-details__expense-notice" role="status">Carregando despesas...</p>
@@ -395,7 +489,20 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
                       <strong>{expense.description}</strong>
                       <small>Pago por {expense.paid_by_name}</small>
                     </div>
-                    <strong>{formatCurrency(Number(expense.amount), group.currency)}</strong>
+                    <div className="group-details__expense-total">
+                      <strong>{formatCurrency(Number(expense.amount), group.currency)}</strong>
+                      {String(expense.created_by_id) === String(currentUserId) && (
+                        <button
+                          className="group-details__expense-delete"
+                          type="button"
+                          onClick={() => handleExpenseDelete(expense)}
+                          disabled={Boolean(deletingExpenseId)}
+                          aria-label={`Excluir despesa ${expense.description}`}
+                        >
+                          {deletingExpenseId === expense.id ? 'Excluindo...' : 'Excluir'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <ul className="group-details__shares">
                     {expense.participants.map((participant) => (
@@ -413,6 +520,11 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
             </ul>
           )}
           {expenseNotice && <p className="group-details__expense-notice" role="status">{expenseNotice}</p>}
+          {expenseActionError && (
+            <p className="group-details__expense-notice group-details__expense-notice--error" role="alert">
+              {expenseActionError}
+            </p>
+          )}
         </section>
 
         <section className="group-details__panel" aria-labelledby="group-members-title">

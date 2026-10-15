@@ -143,6 +143,11 @@ class Expense(models.Model):
         on_delete=models.PROTECT,
         related_name='paid_expenses',
     )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='created_expenses',
+    )
     split_type = models.CharField(max_length=10, choices=SplitType.choices)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -230,10 +230,10 @@ function Dashboard({ user, onLogout }) {
             </svg>
           </button>
         </div>
-        <div className="dashboard-workspace">
+        {/* <div className="dashboard-workspace">
           <span className="workspace-avatar">S</span>
           <span><strong>Meu espaço</strong><small>Área pessoal</small></span>
-        </div>
+        </div> */}
 
         <p className="dashboard-nav-label">MENU</p>
         <nav className="dashboard-nav" aria-label="Navegação">

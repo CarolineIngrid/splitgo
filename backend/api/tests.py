@@ -255,6 +255,43 @@ class GroupExpenseTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(len(response.data[0]['participants']), 2)
 
+    def test_expense_creator_can_delete_expense_and_shares(self):
+        created_expense = self.client.post(
+            self.url,
+            self.expense_payload(paid_by=str(self.member.pk)),
+            format='json',
+        )
+        self.assertEqual(created_expense.data['created_by_id'], str(self.payer.pk))
+        delete_url = reverse(
+            'api-group-expense-detail',
+            args=[self.group.pk, created_expense.data['id']],
+        )
+
+        response = self.client.delete(delete_url)
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertEqual(ExpenseShare.objects.count(), 0)
+        self.assertEqual(self.client.get(self.url).data, [])
+
+    def test_only_expense_creator_can_delete_expense(self):
+        created_expense = self.client.post(
+            self.url,
+            self.expense_payload(paid_by=str(self.member.pk)),
+            format='json',
+        )
+        delete_url = reverse(
+            'api-group-expense-detail',
+            args=[self.group.pk, created_expense.data['id']],
+        )
+        self.client.force_authenticate(self.member)
+
+        response = self.client.delete(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Expense.objects.count(), 1)
+        self.assertEqual(ExpenseShare.objects.count(), 2)
+
     def test_group_members_include_user_ids_for_expense_form(self):
         response = self.client.get(reverse('api-groups'))
 

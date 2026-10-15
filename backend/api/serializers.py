@@ -206,6 +206,7 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         expense = Expense.objects.create(
             group=group,
             paid_by=User.objects.get(pk=validated_data.pop('paid_by')),
+            created_by=self.context['request'].user,
             **validated_data,
         )
         shares = self._build_shares(expense, participants)
@@ -291,6 +292,7 @@ class ExpenseShareSerializer(serializers.ModelSerializer):
 class ExpenseDetailSerializer(serializers.ModelSerializer):
     paid_by_id = serializers.UUIDField(source='paid_by.id', read_only=True)
     paid_by_name = serializers.CharField(source='paid_by.name', read_only=True)
+    created_by_id = serializers.UUIDField(source='created_by.id', read_only=True)
     participants = ExpenseShareSerializer(source='shares', many=True, read_only=True)
 
     class Meta:
@@ -301,6 +303,7 @@ class ExpenseDetailSerializer(serializers.ModelSerializer):
             'amount',
             'paid_by_id',
             'paid_by_name',
+            'created_by_id',
             'split_type',
             'participants',
             'created_at',

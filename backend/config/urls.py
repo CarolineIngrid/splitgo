@@ -46,6 +46,11 @@ urlpatterns = [
         name='api-group-expenses',
     ),
     path(
+        'api/groups/<uuid:group_id>/expenses/<uuid:expense_id>/',
+        GroupExpenseListCreateView.as_view(),
+        name='api-group-expense-detail',
+    ),
+    path(
         'api/groups/<uuid:group_id>/payments/',
         GroupPaymentListCreateView.as_view(),
         name='api-group-payments',
