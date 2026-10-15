@@ -70,21 +70,11 @@ python manage.py runserver
 
 O backend fica disponivel em `http://127.0.0.1:8000`. O endpoint de verificacao e `http://127.0.0.1:8000/api/health/`.
 
-O cadastro da interface usa `POST /api/auth/register/` com JSON no formato:
+O cadastro da interface usa `POST /api/auth/register/` com REST
 
-```json
-{
-  "name": "Nome da pessoa",
-  "email": "pessoa@exemplo.com",
-  "password": "uma-senha-segura"
-}
-```
 
-Em caso de sucesso, a API retorna `201 Created` com UUID, nome, email e data de criacao; a senha nunca e retornada. Dados invalidos, senha que nao atende aos validadores do Django e email ja cadastrado retornam `400 Bad Request` com os erros de validacao.
 
 O metodo `GET /api/auth/register/` lista UUID, nome, email e data de criacao dos usuarios e exige uma sessao Django autenticada como staff. A senha nao e incluida na resposta. O cadastro via `POST` permanece publico. O login usa `POST /api/auth/login/`; a sessao pode ser consultada em `GET /api/auth/session/` e encerrada com `POST /api/auth/logout/`.
-
-As requisicoes POST buscam o token CSRF em `GET /api/auth/csrf/` antes de enviar dados. No desenvolvimento local, `http://localhost:5173` e `http://127.0.0.1:5173` sao origens confiaveis; para outros ambientes, configure `CSRF_TRUSTED_ORIGINS`.
 
 ### Grupos compartilhados
 
@@ -92,17 +82,9 @@ As rotas de grupos usam a sessao autenticada do Django:
 
 - `GET /api/groups/` lista somente os grupos dos quais o usuario atual participa.
 - `POST /api/groups/` cria um grupo e associa o usuario autenticado como administrador. O corpo JSON exige `name` e `currency`, por exemplo:
-
-  ```json
-  {
-    "name": "Viagem de ferias",
-    "currency": "BRL"
-  }
-  ```
-
 - `GET /api/groups/currencies/` lista as moedas aceitas para novos grupos: real brasileiro (`BRL`) e dolar americano (`USD`). A API tambem rejeita qualquer outro codigo.
 
-A resposta de grupo inclui `id` (UUID), `name`, `currency`, `role` (`admin` ou `member`) e `created_at`. A criacao do grupo e da participacao administrativa do criador ocorre em uma unica transacao. Criar um grupo nao cria despesas.
+
 
 #### Participantes do grupo
 
