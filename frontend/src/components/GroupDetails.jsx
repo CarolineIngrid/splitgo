@@ -21,6 +21,15 @@ function getInitials(name) {
     .toUpperCase()
 }
 
+function getDisplayName(userId, memberNames, currentUserId) {
+  const normalizedUserId = String(userId)
+  if (normalizedUserId === String(currentUserId)) {
+    return 'Você'
+  }
+
+  return memberNames.get(normalizedUserId) ?? 'Participante'
+}
+
 function getExpenseIcon(description) {
   const normalizedDescription = description.toLocaleLowerCase('pt-BR')
   const categories = [
@@ -38,7 +47,7 @@ function getExpenseIcon(description) {
   return category?.icon ?? '🧾'
 }
 
-function simplifySettlements(memberBalances, members) {
+function simplifySettlements(memberBalances, members, currentUserId) {
   const memberNames = new Map(
     members.map((member) => [String(member.user_id), member.name]),
   )
@@ -71,8 +80,10 @@ function simplifySettlements(memberBalances, members) {
     if (amount > 0) {
       settlements.push({
         id: `${debtor.userId}:${creditor.userId}`,
-        debtor: memberNames.get(debtor.userId) ?? 'Participante',
-        creditor: memberNames.get(creditor.userId) ?? 'Participante',
+        debtor: getDisplayName(debtor.userId, memberNames, currentUserId),
+        debtorIsCurrentUser: String(debtor.userId) === String(currentUserId),
+        creditor: getDisplayName(creditor.userId, memberNames, currentUserId),
+        creditorIsCurrentUser: String(creditor.userId) === String(currentUserId),
         amount: amount / 100,
       })
     }
@@ -100,6 +111,7 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
   const [expenseNotice, setExpenseNotice] = useState('')
   const [memberNotice, setMemberNotice] = useState('')
   const members = group.members ?? []
+  const currentUserId = members.find((member) => member.is_current_user)?.user_id
   const totalExpenses = expenses.reduce((total, expense) => total + Number(expense.amount), 0)
   const memberNames = new Map(members.map((member) => [String(member.user_id), member.name]))
   const memberBalances = new Map(members.map((member) => [String(member.user_id), 0]))
@@ -159,14 +171,16 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
 
       return [{
         id: pairKey,
-        debtor: memberNames.get(debtorId) ?? 'Participante',
-        creditor: memberNames.get(creditorId) ?? 'Participante',
+        debtor: getDisplayName(debtorId, memberNames, currentUserId),
+        debtorIsCurrentUser: debtorId === String(currentUserId),
+        creditor: getDisplayName(creditorId, memberNames, currentUserId),
+        creditorIsCurrentUser: creditorId === String(currentUserId),
         amount: Math.abs(balance) / 100,
       }]
     })
     .sort((first, second) => second.amount - first.amount)
   const displayedDebts = isSimplificationEnabled
-    ? simplifySettlements(memberBalances, members)
+    ? simplifySettlements(memberBalances, members, currentUserId)
     : pairwiseDebts
   const formattedCreatedAt = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'long',
@@ -274,9 +288,17 @@ function GroupDetails({ group, onBack, onMembersUpdated }) {
               <ul className="group-details__debt-list">
                 {displayedDebts.map((debt) => (
                   <li key={debt.id}>
-                    <span>{debt.debtor} deve</span>
+                    <span>
+                      {debt.debtorIsCurrentUser
+                        ? <strong className="group-details__debt-you">Você</strong>
+                        : debt.debtor} deve
+                    </span>
                     <strong>{formatCurrency(debt.amount, group.currency)}</strong>
-                    <span>a {debt.creditor}</span>
+                    <span>
+                      a {debt.creditorIsCurrentUser
+                        ? <strong className="group-details__debt-you">Você</strong>
+                        : debt.creditor}
+                    </span>
                   </li>
                 ))}
               </ul>

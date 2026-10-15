@@ -376,8 +376,7 @@ class GroupPaymentCreateSerializer(serializers.ModelSerializer):
 
         pair_key = tuple(sorted([payer_id, recipient_id]))
         pair_balance = self._pairwise_debts(group).get(pair_key, Decimal('0'))
-        max_allowed = pair_balance if payer_id == pair_key[0] else -pair_balance
-        max_allowed = max(Decimal('0'), max_allowed)
+        max_allowed = abs(pair_balance)
 
         if attrs['amount'] > max_allowed:
             raise serializers.ValidationError({

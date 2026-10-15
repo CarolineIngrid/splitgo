@@ -1025,6 +1025,10 @@
   font-weight: 800;
 }
 
+.group-details__debt-list li .group-details__debt-you {
+  color: #16803c;
+}
+
 .group-details__simplify-button {
   display: inline-flex;
   /* flex: 0 0 auto; */
